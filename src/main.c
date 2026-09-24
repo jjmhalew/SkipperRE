@@ -289,7 +289,7 @@ int main(int argc, char **argv) {
     SetUnhandledExceptionFilter(crash_filter);
     const char *data = "extract", *movie = "start", *shot = NULL;
     int shot_frames = 0;
-    int clicks[64][3], nclicks = 0, every = 0;
+    int clicks[64][3], nclicks = 0, every = 0, dump = 0;
     char bin[300] = "";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
@@ -301,6 +301,7 @@ int main(int argc, char **argv) {
             clicks[nclicks][0] = atoi(argv[++i]); clicks[nclicks][1] = atoi(argv[++i]); clicks[nclicks++][2] = atoi(argv[++i]);
         }
         else if (!strcmp(argv[i], "--every") && i + 1 < argc) every = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--dump")) dump = 1;
         else data = argv[i];
     }
     if (g_scale < 1) g_scale = 1;
@@ -329,6 +330,7 @@ int main(int argc, char **argv) {
                 }
             DBG_CHECK();
             int ms = player_tick();
+            if (g_headless) player_idle();   /* headless: één idle per frame */
             DBG_CHECK();
             stage_present();
             frames++;
@@ -348,6 +350,7 @@ int main(int argc, char **argv) {
         }
         if (P.halted == 1 && !shot) { /* halt: blijf het laatste beeld tonen tot het venster sluit */ }
     }
+    if (dump) { void globals_dump(FILE *); globals_dump(stderr); }
     if (shot) {
         stage_compose();
         stage_screenshot(shot);

@@ -906,6 +906,21 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
                     a.u.l->v[0] = sv;
                 }
             } else if (id.t == T_VARREF) {
+                /* D4-syntax f(var, ...) waarbij de compiler niet wist of f een XObject was: het eerste
+                 * argument is dan de NAAM van een variabele (local, arg of property); niet gedeclareerd
+                 * = VOID, net als in het origineel */
+                if (a.u.l->n > 0 && a.u.l->v[0].t == T_SYM) {
+                    int vn = a.u.l->v[0].u.i;
+                    Datum val = VOIDD;
+                    for (int i = 0; i < h->nlocals; i++) if (h->locals[i] == vn) val = fr.locals[i];
+                    for (int i = 0; i < h->nargs && i < fr.nargs; i++) if (h->args[i] == vn) val = fr.args[i];
+                    if (val.t == T_VOID && fr.nargs > 0 && fr.args[0].t == T_OBJ) {
+                        int f;
+                        val = obj_getprop(fr.args[0].u.o, vn, &f);
+                    }
+                    d_unref(a.u.l->v[0]);
+                    a.u.l->v[0] = d_ref(val);
+                }
                 res = call_builtin_or_handler(id.u.i, a.u.l->v, a.u.l->n);
             }
             int nr = args_noret(a);
@@ -1061,11 +1076,16 @@ static Datum call_builtin_or_handler(int name, Datum *a, int n) {
     if (S_birth < 0) { S_birth = sym("birth"); S_new = sym("new"); }
     if (n > 0 && a[0].t == T_SCRIPT && (name == S_birth || name == S_new))
         return obj_new(a[0].u.sc, a + 1, n - 1);
-    /* 1. handler van een object als eerste argument (D4-stijl: stepFrame(obj)) */
+    /* 1. handler van een object of script als eerste argument (D4-stijl: stepFrame(obj),
+     *    Event(script "LocScriptC5", ...)) */
     if (n > 0 && a[0].t == T_OBJ) {
         Script *hs;
         Handler *h = obj_handler(a[0].u.o, name, &hs);
         if (h) return vm_call(hs, h, a, n);
+    }
+    if (n > 0 && a[0].t == T_SCRIPT && a[0].u.sc) {
+        Handler *h = script_handler(a[0].u.sc, name);
+        if (h) return vm_call(a[0].u.sc, h, a, n);
     }
     /* 2. movie-scripts */
     Script *sc;
@@ -1172,4 +1192,12 @@ void lingo_do(const char *s) {
     Datum r = call_builtin_or_handler(nm, args, n);
     d_unref(r);
     for (int i = 0; i < n; i++) d_unref(args[i]);
+}
+
+void globals_dump(FILE *f) {
+    for (int i = 0; i < g_nglob; i++) {
+        fprintf(f, "%s = ", symname(g_glob[i].name));
+        d_print(f, g_glob[i].v);
+        fputc('\n', f);
+    }
 }
