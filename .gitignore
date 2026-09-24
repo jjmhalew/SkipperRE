@@ -1,0 +1,7 @@
+extract/
+game/
+out/
+__pycache__/
+*.pyc
+.claude/launch.json
+.claude/worktrees
