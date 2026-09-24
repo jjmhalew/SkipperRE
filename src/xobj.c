@@ -150,6 +150,8 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
             if (!_stricmp(g->fn, "CDPlaying")) return d_int(cd_playing());
             if (!_stricmp(g->fn, "CDStop")) { cd_stop(); return d_int(1); }
             if (!_stricmp(g->fn, "LoadSaveGame")) return d_int(ld_save_game(d_toint(ARG(2))));
+            if (!_stricmp(g->fn, "VkKeyScan")) return d_int(VkKeyScanA((char)d_toint(ARG(1))));
+            if (!_stricmp(g->fn, "InvalidateRect") || !_stricmp(g->fn, "UpdateWindow")) { P.update_needed = 1; return d_int(0); }
             vm_error("MMSYS.%s niet geïmplementeerd", g->fn);
             return d_int(0);
         }

@@ -860,9 +860,20 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             a = pop();
             Datum res;
             /* birth/new(script "X") blijft de constructor, ook als dit script zelf 'birth' heeft */
+            Handler *other = NULL;
+            Script *osc = NULL;
+            if (arg < s->nh && a.u.l->n > 0) {
+                /* ook bij een lokale aanroep wint een script/object als eerste argument dat de
+                 * handler zelf heeft: mouseUp(script "X") in een script met eigen mouseUp */
+                Datum a0 = a.u.l->v[0];
+                if (a0.t == T_SCRIPT && a0.u.sc != s) { osc = a0.u.sc; other = script_handler(osc, s->h[arg].name); }
+                else if (a0.t == T_OBJ) other = obj_handler(a0.u.o, s->h[arg].name, &osc);
+                if (other && osc == s && other == &s->h[arg]) other = NULL;
+            }
             if (arg < s->nh && a.u.l->n > 0 && a.u.l->v[0].t == T_SCRIPT
                 && (s->h[arg].name == sym("birth") || s->h[arg].name == sym("new")))
                 res = obj_new(a.u.l->v[0].u.sc, a.u.l->v + 1, a.u.l->n - 1);
+            else if (other) res = vm_call(osc, other, a.u.l->v, a.u.l->n);
             else res = arg < s->nh ? vm_call(s, &s->h[arg], a.u.l->v, a.u.l->n) : VOIDD;
             int nr = args_noret(a);
             args_free(a);
