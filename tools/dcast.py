@@ -71,7 +71,8 @@ def save_png(path, w, h, rgb):
 class Cast:
     """Alle leden van de (eerste) cast in een bestand: nummer -> (type, naam, spec, children)."""
 
-    def __init__(self, rf):
+    def __init__(self, rf, first=1):
+        """first = nummer van het eerste slot in CAS* (VWCF minMember voor de interne cast)."""
         self.rf = rf
         self.members = {}
         secs = rf.cast_sections()
@@ -80,7 +81,7 @@ class Cast:
         for i, cid in enumerate(secs[0][1]):
             if cid > 0:
                 t, info, spec = rf.cast_member(cid)
-                self.members[i + 1] = (t, info.get('name', ''), spec, rf.children.get(cid, {}), info)
+                self.members[i + first] = (t, info.get('name', ''), spec, rf.children.get(cid, {}), info)
 
     def palette(self, num):
         m = self.members.get(num)

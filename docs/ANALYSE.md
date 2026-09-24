@@ -44,3 +44,31 @@ Via het XObject `DLLGlue(mNew, the pathName & "MMSYS.DLL", <functie>, <ret>, <ar
 `u16 pitch|0x8000`, `rect top,left,bottom,right`, 8 bytes (onbekend), `i16 regY, regX` (absoluut, zelfde
 stelsel als rect), `u8 ?`, `u8 bpp`, `i16 clutCastLib, clutMember`. BITD: rauw als lengte = pitch×h, anders
 PackBits per byte (n<0x80: n+1 letterlijk; anders 257-n herhalingen). CLUT: 6 bytes per kleur (16-bit RGB).
+
+## Score (VWSC, D5)
+Kop (big-endian): `u32 streamgrootte, u32 offset frame 1 (20), u32 #frames, u16 versie (7), u16 spritegrootte (24),
+u16 #kanalen (50), u16 ?`. Per frame `u16 lengte` + delta's `(u16 len, u16 offset, data)` op een buffer van
+50x24 bytes; elk frame begint met de toestand van het vorige.
+- Hoofdkanalen (bytes 0-47): `0 script (lib,member)`, `4 sound1`, `8 sound2`, `12 transitie`, `21 tempo`,
+  `24 palet (lib,member)`, `28 paletsnelheid`, `29 paletvlaggen`.
+- Sprite n op `48 + (n-1)*24`: `u8 type, u8 ink (|0x40 trails, |0x80 stretch), u16 castLib, u16 member,
+  u16 scriptLib, u16 scriptMember, u8 fore, u8 back, i16 locV, i16 locH, i16 hoogte, i16 breedte, ...`.
+  loc = registratiepunt; linksboven = loc - (regX - rect.left, regY - rect.top).
+- VWLB: `u16 n`, n+1 × `(u16 frame, u16 offset)`, daarna de namen achter elkaar.
+- MCsL: lijst met per cast (naam, pad, preload, (min, max, id)).
+- Het eigenlijke spel zet vrijwel alle sprites vanuit Lingo (`InitSprite`/`SetSpriteCast`, puppets): in de
+  scores staan alleen placeholders op (-100,-100). Alleen de startfilm heeft een 'echte' score.
+
+## Opstartketen
+`start32.exe` bevat (APPL-RIFX achter de `59JP`-kop, File-chunk met absolute offsets) de film **start**
+(`tools/projector.py` → `extract/start.dxr`): INI/MOVUTILS/FILEIO/DLLGLUE openen, `IVANOFF.INI` [MAGNUS]
+Path → `gMMPath`, `MAGNUS.INI` [Sound] StartLevel → `the soundLevel`, CD-check via `gCDDrive & ":\MMTUTOR.DXR"`
+(`gCDDrive` komt uit `LINGO.INI`, door de installer ingevuld), kleurdiepte 8 → `go 1, "INTRO"` →
+`go "Start", "MAGNUS"`.
+
+## Decompiler
+`tools/lingodec.py` maakt leesbare Lingo (if/else, repeat while, repeat with ... in, case). Alle films:
+`python tools/lingodec.py --out out/src extract/*.dxr extract/*.cxt` (~24.000 regels, 13 restanten).
+Semantiek die daaruit blijkt: `get/set` met type 6 = spriteproperty, 7 = "the"-animatieproperty,
+9 = member-property (lib, member van de stack), 0 = movie-property (mouseDownScript, ...).
+Locals/args/literals: index × 8. `objcallv4 t` roept de variabele (type t) aan als XObject.

@@ -18,6 +18,9 @@ Wise-installer gehaalde `start32.exe` in `game/` (beide staan in `.gitignore`).
 - **Lingo-disassembler** (`tools/lingodis.py`): alle 596 scripts / 1560 handlers, 0 onbekende opcodes;
   `--stats` geeft het gebruik van builtins (82 stuks), properties en entities
 - **Bitmaps + paletten** (`tools/dcast.py`): 1/8 bpp, RLE, CLUT-leden → PNG
+- **Decompiler** (`tools/lingodec.py`): leesbare Lingo van alle films
+- **Score, labels, cast-libs** (`tools/score.py`), frame renderen met inks 0/8/36
+- **Startfilm uit de projector** (`tools/projector.py`)
 
 ## Gebruik
 ```bash
