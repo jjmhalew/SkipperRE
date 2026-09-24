@@ -350,7 +350,21 @@ int main(int argc, char **argv) {
         }
         if (P.halted == 1 && !shot) { /* halt: blijf het laatste beeld tonen tot het venster sluit */ }
     }
-    if (dump) { void globals_dump(FILE *); globals_dump(stderr); }
+    if (dump) {
+        void globals_dump(FILE *);
+        globals_dump(stderr);
+        for (int ch = 1; ch <= NCHAN; ch++) {
+            Channel *c = &P.ch[ch];
+            if (!c->member || !c->visible) continue;
+            CastLib *cl;
+            Member *m = movie_member(P.mv, c->lib, c->member, &cl);
+            int l, t, r, b;
+            sprite_rect(ch, &l, &t, &r, &b);
+            fprintf(stderr, "[ch %2d] %d:%d %-14s type %d ink %d fg %d bg %d rect %d,%d-%d,%d stretch %d puppet %d\n", ch,
+                    c->lib, c->member, m ? m->name : "?", m ? m->type : -1, c->ink, c->fore, c->back, l, t, r, b,
+                    c->stretch, c->puppet);
+        }
+    }
     if (shot) {
         stage_compose();
         stage_screenshot(shot);

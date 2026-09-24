@@ -240,6 +240,9 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
             break;
         }
         case MT_SHAPE: {
+            /* background transparent: pixels in de achtergrondkleur verdwijnen. De hotspots van het
+             * spel (HSC5Clock, ExitDown, ...) zijn vormen met fore = back = 0 en dus onzichtbaar. */
+            if ((c->ink == 36 || c->ink == 1) && (c->fore & 255) == (c->back & 255)) break;
             uint32_t col = g_lut[c->fore & 255];
             int filled = m->shape_filled;
             for (int y = t < 0 ? 0 : t; y < b && y < chh; y++)
