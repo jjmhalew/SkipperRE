@@ -401,7 +401,7 @@ Datum obj_getprop(Obj *o, int name, int *found) {
             if (o->names[i] == name) { if (found) *found = 1; return o->vals[i]; }
         Datum anc = VOIDD;
         for (int i = 0; i < o->n; i++)
-            if (o->names[i] == S_ancestor) anc = o->vals[i];
+            if (o->names[i] == S_ancestor) { anc = o->vals[i]; break; }
         o = anc.t == T_OBJ ? anc.u.o : NULL;
     }
     if (found) *found = 0;
@@ -416,7 +416,7 @@ int obj_setprop(Obj *o, int name, Datum v) {
             if (o->names[i] == name) { d_unref(o->vals[i]); o->vals[i] = v; return 1; }
         Datum anc = VOIDD;
         for (int i = 0; i < o->n; i++)
-            if (o->names[i] == S_ancestor) anc = o->vals[i];
+            if (o->names[i] == S_ancestor) { anc = o->vals[i]; break; }
         o = anc.t == T_OBJ ? anc.u.o : NULL;
     }
     /* onbekend: toevoegen aan het object zelf (Director geeft een fout, maar dit is robuuster) */
@@ -435,7 +435,7 @@ Handler *obj_handler(Obj *o, int name, Script **sc) {
         if (h) { if (sc) *sc = o->script; return h; }
         Datum anc = VOIDD;
         for (int i = 0; i < o->n; i++)
-            if (o->names[i] == S_ancestor) anc = o->vals[i];
+            if (o->names[i] == S_ancestor) { anc = o->vals[i]; break; }
         o = anc.t == T_OBJ ? anc.u.o : NULL;
     }
     return NULL;
@@ -446,11 +446,13 @@ Datum obj_new(Script *s, Datum *args, int n) {
     Obj *o = calloc(1, sizeof *o);
     o->rc = 1;
     o->script = s;
-    o->n = s->nprops + 1;
-    o->names = malloc(sizeof(int) * o->n);
-    o->vals = calloc(o->n, sizeof(Datum));
+    int has_anc = 0;
+    for (int i = 0; i < s->nprops; i++) if (s->props[i] == S_ancestor) has_anc = 1;
+    o->n = s->nprops + !has_anc;
+    o->names = malloc(sizeof(int) * (o->n + 1));
+    o->vals = calloc(o->n + 1, sizeof(Datum));
     for (int i = 0; i < s->nprops; i++) o->names[i] = s->props[i];
-    o->names[s->nprops] = S_ancestor;
+    if (!has_anc) o->names[s->nprops] = S_ancestor;
     Datum me = {T_OBJ};
     me.u.o = o;
     /* birth/new-handler met me als eerste argument */
@@ -724,11 +726,9 @@ static Datum *var_slot(int vt, Datum id, Datum lib, Datum *field_tmp) {
             for (int depth = 0; o && depth < 32; depth++) {
                 for (int i = 0; i < o->n; i++)
                     if (o->names[i] == nm) return &o->vals[i];
-                int found;
                 Datum anc = VOIDD;
-                (void)found;
                 for (int i = 0; i < o->n; i++)
-                    if (o->names[i] == sym("ancestor")) anc = o->vals[i];
+                    if (o->names[i] == sym("ancestor")) { anc = o->vals[i]; break; }
                 o = anc.t == T_OBJ ? anc.u.o : NULL;
             }
         }
@@ -858,7 +858,12 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
         case 0x55: a = pop(); if (!d_truthy(a)) pc = pos + arg; d_unref(a); break;
         case 0x56: {
             a = pop();
-            Datum res = arg < s->nh ? vm_call(s, &s->h[arg], a.u.l->v, a.u.l->n) : VOIDD;
+            Datum res;
+            /* birth/new(script "X") blijft de constructor, ook als dit script zelf 'birth' heeft */
+            if (arg < s->nh && a.u.l->n > 0 && a.u.l->v[0].t == T_SCRIPT
+                && (s->h[arg].name == sym("birth") || s->h[arg].name == sym("new")))
+                res = obj_new(a.u.l->v[0].u.sc, a.u.l->v + 1, a.u.l->n - 1);
+            else res = arg < s->nh ? vm_call(s, &s->h[arg], a.u.l->v, a.u.l->n) : VOIDD;
             int nr = args_noret(a);
             args_free(a);
             if (nr) d_unref(res); else push(res);
@@ -1050,6 +1055,12 @@ Datum vm_call_name(int name, Datum *a, int n, int *found) {
 static int g_warned[4096];
 
 static Datum call_builtin_or_handler(int name, Datum *a, int n) {
+    /* 0. birth/new(script "X", ...) is altijd de constructor, ook al definiëren de (D4-stijl)
+     *    klassen zelf een globale movie-handler 'birth' */
+    static int S_birth = -1, S_new = -1;
+    if (S_birth < 0) { S_birth = sym("birth"); S_new = sym("new"); }
+    if (n > 0 && a[0].t == T_SCRIPT && (name == S_birth || name == S_new))
+        return obj_new(a[0].u.sc, a + 1, n - 1);
     /* 1. handler van een object als eerste argument (D4-stijl: stepFrame(obj)) */
     if (n > 0 && a[0].t == T_OBJ) {
         Script *hs;

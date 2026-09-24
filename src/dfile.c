@@ -270,7 +270,7 @@ Sound *member_sound(CastLib *c, Member *m) {
     if ((size_t)n * bps > avail) n = (int)(avail / bps), s->frames = n / s->channels;
     s->pcm = malloc(sizeof(int16_t) * (n ? n : 1));
     if (s->bits == 8) {
-        for (int i = 0; i < n; i++) s->pcm[i] = (int16_t)((data[i] - 128) << 8);
+        for (int i = 0; i < n; i++) s->pcm[i] = (int16_t)((data[i] - 128) * 256);
     } else {
         /* big-endian (Mac) of little-endian: kies de vloeiendste interpretatie */
         double dbe = 0, dle = 0;

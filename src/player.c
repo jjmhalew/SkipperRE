@@ -610,7 +610,7 @@ void player_set(int type, int id, Datum *tg, int nt, Datum v) {
         }
         break;
     case 4: break;
-    case 6: sprite_set(d_toint(tg[0]), id, v); break;
+    case 6: sprite_set(d_toint(tg[0]), id, v); return;   /* sprite_set neemt v over */
     case 7:
         if (id == 26) { P.sound_level = d_toint(v); sound_set_level(P.sound_level); }
         else if (id == 8) P.exit_lock = d_toint(v);

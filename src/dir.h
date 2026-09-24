@@ -5,6 +5,25 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#ifdef DBGHEAP
+void *dbg_malloc(size_t n, const char *file, int line);
+void *dbg_calloc(size_t a, size_t n, const char *file, int line);
+void *dbg_realloc(void *p, size_t n, const char *file, int line);
+void dbg_free(void *p, const char *file, int line);
+char *dbg_strdup(const char *s, const char *file, int line);
+void dbg_check(const char *file, int line);
+#define malloc(n) dbg_malloc(n, __FILE__, __LINE__)
+#define calloc(a, n) dbg_calloc(a, n, __FILE__, __LINE__)
+#define realloc(p, n) dbg_realloc(p, n, __FILE__, __LINE__)
+#define free(p) dbg_free(p, __FILE__, __LINE__)
+#define strdup(s) dbg_strdup(s, __FILE__, __LINE__)
+#define DBG_CHECK() dbg_check(__FILE__, __LINE__)
+#else
+#define DBG_CHECK() ((void)0)
+#endif
 
 #define FOURCC(a, b, c, d) ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (uint32_t)(d))
 

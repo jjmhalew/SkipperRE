@@ -9,6 +9,7 @@
 #include <string.h>
 #include <windows.h>
 #include <math.h>
+#include <dbghelp.h>
 
 extern int sound_headless;
 void palette_step(void);
@@ -254,10 +255,41 @@ static void make_window(void) {
     g_cur_wait = LoadCursor(NULL, IDC_WAIT);
 }
 
+/* crash: adres + frame-pointer-keten, via dbghelp en de PDB naar functie:regel */
+static void crash_sym(uintptr_t a) {
+    char buf[sizeof(SYMBOL_INFO) + 256];
+    SYMBOL_INFO *si = (SYMBOL_INFO *)buf;
+    si->SizeOfStruct = sizeof(SYMBOL_INFO);
+    si->MaxNameLen = 255;
+    DWORD64 disp = 0;
+    DWORD d2 = 0;
+    IMAGEHLP_LINE64 ln = {sizeof ln};
+    HANDLE pr = GetCurrentProcess();
+    if (SymFromAddr(pr, a, &disp, si)) {
+        if (SymGetLineFromAddr64(pr, a, &d2, &ln)) fprintf(stderr, "[crash]   %s  %s:%lu\n", si->Name, ln.FileName, ln.LineNumber);
+        else fprintf(stderr, "[crash]   %s+%llx\n", si->Name, (unsigned long long)disp);
+    } else fprintf(stderr, "[crash]   %p\n", (void *)a);
+}
+
+static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep) {
+    SymInitialize(GetCurrentProcess(), NULL, TRUE);
+    CONTEXT *c = ep->ContextRecord;
+    fprintf(stderr, "[crash] code %08lx\n", ep->ExceptionRecord->ExceptionCode);
+    crash_sym((uintptr_t)ep->ExceptionRecord->ExceptionAddress);
+    uintptr_t *fp = (uintptr_t *)c->Rbp;
+    for (int i = 0; i < 24 && fp && !IsBadReadPtr(fp, 16); i++) {
+        crash_sym(fp[1]);
+        fp = (uintptr_t *)fp[0];
+    }
+    fflush(stderr);
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
 int main(int argc, char **argv) {
+    SetUnhandledExceptionFilter(crash_filter);
     const char *data = "extract", *movie = "start", *shot = NULL;
     int shot_frames = 0;
-    int click_x = -1, click_y = -1, click_f = -1;
+    int clicks[64][3], nclicks = 0, every = 0;
     char bin[300] = "";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
@@ -265,7 +297,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) g_scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--trace")) vm_trace = 1;
         else if (!strcmp(argv[i], "--shot") && i + 2 < argc) { shot_frames = atoi(argv[++i]); shot = argv[++i]; g_headless = 1; }
-        else if (!strcmp(argv[i], "--click") && i + 3 < argc) { click_x = atoi(argv[++i]); click_y = atoi(argv[++i]); click_f = atoi(argv[++i]); }
+        else if (!strcmp(argv[i], "--click") && i + 3 < argc && nclicks < 64) {
+            clicks[nclicks][0] = atoi(argv[++i]); clicks[nclicks][1] = atoi(argv[++i]); clicks[nclicks++][2] = atoi(argv[++i]);
+        }
+        else if (!strcmp(argv[i], "--every") && i + 1 < argc) every = atoi(argv[++i]);
         else data = argv[i];
     }
     if (g_scale < 1) g_scale = 1;
@@ -286,10 +321,23 @@ int main(int argc, char **argv) {
         if (!g_headless) pump();
         uint32_t t = now_ms();
         if (g_headless || (int32_t)(t - next) >= 0) {
-            if (click_f >= 0 && frames == click_f) { player_mouse(click_x, click_y, 1, 0, 0); player_mouse(click_x, click_y, 0, 1, 0); }
+            for (int k = 0; k < nclicks; k++)
+                if (frames == clicks[k][2]) {
+                    player_mouse(clicks[k][0], clicks[k][1], 0, 0, 0);
+                    player_mouse(clicks[k][0], clicks[k][1], 1, 0, 0);
+                    player_mouse(clicks[k][0], clicks[k][1], 0, 1, 0);
+                }
+            DBG_CHECK();
             int ms = player_tick();
+            DBG_CHECK();
             stage_present();
             frames++;
+            if (shot && every && frames % every == 0) {
+                char fn[300];
+                snprintf(fn, sizeof fn, "%s.%04d.bmp", shot, frames);
+                stage_screenshot(fn);
+                fprintf(stderr, "[shot] %d %s frame %d\n", frames, P.mv ? P.mv->name : "?", P.frame);
+            }
             next = t + (ms > 0 ? ms : 1);
             if (shot && frames >= shot_frames) break;
             if (g_headless && ms > 0) Sleep(ms / 4);   /* headless: sneller dan echt, maar timers lopen door */
