@@ -325,35 +325,59 @@ void player_update_stage(void) { stage_present(); }
 /* ------------------------------------------------------------------ cursors */
 static HCURSOR g_cur_arrow, g_cur_wait;
 static HCURSOR g_cur_cache[64];
-static int g_cur_key[64], g_ncur;
+static int g_cur_key[64], g_cur_scale[64], g_ncur;
+
+/* cursors groeien mee met het podium (een 16x16-cursor hoort bij 640x480) */
+static int cursor_scale(void) {
+    int s = (g_dst.right - g_dst.left + 320) / 640;
+    return s < 1 ? 1 : s > 8 ? 8 : s;
+}
 
 static HCURSOR bitmap_cursor(Datum lst) {
     if (lst.t != T_LIST || lst.u.l->n < 1) return g_cur_arrow;
     int num = d_toint(lst.u.l->v[0]), mask = lst.u.l->n > 1 ? d_toint(lst.u.l->v[1]) : 0;
-    int key = num << 16 | (mask & 0xffff);
-    for (int i = 0; i < g_ncur; i++) if (g_cur_key[i] == key) return g_cur_cache[i];
+    int key = num << 16 | (mask & 0xffff), s = cursor_scale();
+    for (int i = 0; i < g_ncur; i++) if (g_cur_key[i] == key && g_cur_scale[i] == s) return g_cur_cache[i];
     CastLib *cl, *ml;
     Member *m = movie_member(P.mv, (num >> 16) + 1, num & 0xffff, &cl);
     Member *mm = mask ? movie_member(P.mv, (mask >> 16) + 1, mask & 0xffff, &ml) : NULL;
     Bitmap *b = m ? member_bitmap(cl, m) : NULL;
     Bitmap *mb = mm ? member_bitmap(ml, mm) : NULL;
     if (!b) return g_cur_arrow;
-    int cw = GetSystemMetrics(SM_CXCURSOR), ch = GetSystemMetrics(SM_CYCURSOR);
-    uint8_t *andp = malloc(cw * ch / 8), *xorp = malloc(cw * ch / 8);
-    memset(andp, 0xff, cw * ch / 8);
-    memset(xorp, 0, cw * ch / 8);
-    for (int y = 0; y < b->h && y < ch; y++)
-        for (int x = 0; x < b->w && x < cw; x++) {
-            int black = b->px[y * b->w + x] != 0;
-            int opaque = mb ? (x < mb->w && y < mb->h && mb->px[y * mb->w + x] != 0) : black;
-            int bit = 0x80 >> (x & 7), o = y * cw / 8 + x / 8;
-            if (opaque) andp[o] &= ~bit;
-            if (opaque && !black) xorp[o] |= bit;   /* wit */
+    /* 32-bit cursor met alfa: zwart/wit uit de bitmap, doorzichtig buiten het masker */
+    int cw = b->w * s, ch = b->h * s;
+    if (cw > 256) cw = 256;
+    if (ch > 256) ch = 256;
+    BITMAPINFO bi = {0};
+    bi.bmiHeader.biSize = sizeof bi.bmiHeader;
+    bi.bmiHeader.biWidth = cw;
+    bi.bmiHeader.biHeight = -ch;
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    void *bits = NULL;
+    HDC dc = GetDC(NULL);
+    HBITMAP color = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    ReleaseDC(NULL, dc);
+    if (!color || !bits) return g_cur_arrow;
+    uint32_t *px = bits;
+    for (int y = 0; y < ch; y++)
+        for (int x = 0; x < cw; x++) {
+            int sx = x / s, sy = y / s;
+            int black = b->px[sy * b->w + sx] != 0;
+            int opaque = mb ? (sx < mb->w && sy < mb->h && mb->px[sy * mb->w + sx] != 0) : black;
+            px[y * cw + x] = !opaque ? 0 : black ? 0xff000000u : 0xffffffffu;
         }
-    HCURSOR c = CreateCursor(GetModuleHandle(NULL), b->reg_x, b->reg_y, cw, ch, andp, xorp);
-    free(andp);
-    free(xorp);
-    if (g_ncur < 64) { g_cur_key[g_ncur] = key; g_cur_cache[g_ncur++] = c; }
+    HBITMAP bmask = CreateBitmap(cw, ch, 1, 1, NULL);
+    ICONINFO ii = {FALSE, (DWORD)(b->reg_x * s), (DWORD)(b->reg_y * s), bmask, color};
+    HCURSOR c = (HCURSOR)CreateIconIndirect(&ii);
+    DeleteObject(bmask);
+    DeleteObject(color);
+    if (!c) return g_cur_arrow;
+    if (g_ncur == 64) {   /* vol (bijv. na vaak van grootte wisselen): opnieuw beginnen */
+        for (int i = 0; i < g_ncur; i++) DestroyCursor(g_cur_cache[i]);
+        g_ncur = 0;
+    }
+    g_cur_key[g_ncur] = key; g_cur_scale[g_ncur] = s; g_cur_cache[g_ncur++] = c;
     return c;
 }
 
