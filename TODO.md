@@ -67,8 +67,9 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [x] **Options** (`mmdlg1`, F7), **map** (`mmdlg4`, map icon in the pocket), **reward** (`mmdlg5` at
       ≥ 50 points), **tutorial** (`mmtutor`, F1). *(all four verified headless: options (incl. subtitle label after
       the actorList fix), map, tutorial, and the reward mirror via the mirror at ≥ 50 points)*
-- [ ] **All 12 minigames** actually playable: rounds, scoring, back to the room. Only the first screen +
-      clicks are tested now.
+- [ ] **All 12 minigames** actually playable: rounds, scoring, back to the room. *(fuzzed with `tools/fuzz.py`:
+      2 seeds x 3000-4000 frames of random clicks/drags/keys per game, no crashes, UBSan traps or unexpected
+      Lingo errors; ABC played through headless incl. video. Real rounds still need a human.)*
 - [ ] **Whole adventure**: 47 locations, all puzzles (`JobIsDone` requires 18 conditions: mirror,
       bucket, pacifier, nut, letter, dice, food, nose, trousers, crown, broom, hat, flowers, …).
       Mainly check the animation chains (`AnimEnd` via `gAnimNotify`, only fixed on 2026-09-25).
