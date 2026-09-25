@@ -365,6 +365,9 @@ void bmp_write(const char *path, const uint32_t *px, int w, int h);
 uint32_t *stage_bitmap_argb(Bitmap *bm);
 void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t);
 int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintOMatic-document is */
+int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
+int disc_make_start(const char *setup_exe, const char *dst);
+int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
 void host_print(const uint32_t *px, int w, int h, int landscape, const char *name);
 int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
 int player_focus_field(void);   /* kanaal van het editable veld met toetsenbordfocus in CP, of 0 */

@@ -632,10 +632,33 @@ int main(int argc, char **argv) {
         else data = argv[i];
     }
     if (g_scale < 0) g_scale = 0;
-    char full[MAX_PATH];
-    GetFullPathNameA(data, sizeof full, full, NULL);
+    /* spelbestanden: opgegeven map, extract\, %APPDATA%\SkipperRE\data, cd-station of een cd-image */
+    char full[MAX_PATH], appdir[MAX_PATH], binfound[600] = "";
+    if (GetEnvironmentVariableA("APPDATA", appdir, sizeof appdir))
+        snprintf(appdir + strlen(appdir), sizeof appdir - strlen(appdir), "\\SkipperRE");
+    else snprintf(appdir, sizeof appdir, "save");
+    CreateDirectoryA(appdir, NULL);
+    if (!disc_find_data(data, bin, appdir, full, sizeof full, binfound, sizeof binfound)) {
+        const char *msg = "De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
+                          "Stop de cd in het cd-station, of start met:\n"
+                          "  skipper.exe <map met Magnus.dxr>\n"
+                          "  skipper.exe --bin <pad naar SKIPPER_1.BIN of .CUE>";
+        if (g_headless) fprintf(stderr, "%s\n", msg);
+        else MessageBoxA(NULL, msg, "Skipper & Skeeto", MB_OK | MB_ICONWARNING);
+        return 1;
+    }
     player_init(full);
     setup_save_dir();
+    /* de opstartfilm zit alleen in de projector in SETUP.EXE: eenmalig naar de opslagmap halen */
+    char sd[MAX_PATH], sd2[MAX_PATH], setup[MAX_PATH];
+    snprintf(sd, sizeof sd, "%s\\start.dxr", full);
+    snprintf(sd2, sizeof sd2, "%s\\start.dxr", P.save_dir);
+    snprintf(setup, sizeof setup, "%s\\SETUP.EXE", full);
+    if (GetFileAttributesA(sd) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(sd2) == INVALID_FILE_ATTRIBUTES) {
+        fprintf(stderr, "[disc] start.dxr uit SETUP.EXE halen ...\n");
+        if (!disc_make_start(setup, sd2)) fprintf(stderr, "[disc] start.dxr niet gevonden in %s\n", setup);
+    }
+    if (binfound[0]) snprintf(bin, sizeof bin, "%s", binfound);
     if (!bin[0]) snprintf(bin, sizeof bin, "%s\\..\\SKIPPER_1.BIN", full);
     GetFullPathNameA(bin, sizeof P.bin_path, P.bin_path, NULL);
     sound_headless = g_headless;

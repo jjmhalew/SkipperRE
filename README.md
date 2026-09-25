@@ -8,8 +8,16 @@ Het spel is gemaakt met **Macromedia Director 5** (bestandsversie 1217). Er is d
 alle logica zit als Lingo-bytecode in de `.dxr`-films. De port is daarom een eigen Director 5-runtime
 (RIFX-container, cast, score, Lingo-VM) plus native vervangers voor de paar DLL's die het spel aanroept.
 
-Er staan geen game-bestanden in deze repo. Zet de inhoud van de datatrack in `extract/` en de uit de
-Wise-installer gehaalde `start32.exe` in `game/` (beide staan in `.gitignore`).
+Er staan geen game-bestanden in deze repo. De speler zoekt ze zelf, in deze volgorde:
+1. de map die je opgeeft (`skipper.exe <map>`), of `extract\` naast de exe of in de repo;
+2. `%APPDATA%\SkipperRE\data` (een eerder uitgepakte cd);
+3. een cd-station met de cd erin;
+4. een cd-image: `--bin <SKIPPER_1.BIN of .CUE>` (of een `.cue` naast de exe / in de werkmap). De datatrack
+   wordt dan eenmalig uitgepakt naar `%APPDATA%\SkipperRE\data` (~200 MB, catalogus en VfW overgeslagen).
+
+De opstartfilm `start.dxr` staat niet los op de cd: die zit in de projector `start32.exe`, als deflate-stroom
+in de Wise-installer `SETUP.EXE`. De speler haalt hem daar eenmalig uit (`src/disc.c`: eigen inflate en
+ISO9660-lezer). Voor de Python-tools kun je nog steeds `extract/` en `game/` handmatig vullen (`.gitignore`).
 
 ## Stand van zaken
 - **Disc ontleed**: Enhanced CD, sessie 1 = 15 audiotracks (muziek), sessie 2 = ISO9660-datatrack

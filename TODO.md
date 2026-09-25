@@ -75,7 +75,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       credits)*: `CheckDone` → `go(1, "magnus1")` (`Magnus1.dxr`, never started yet; uses
       transition cast members).
 - [ ] Other keys: Esc (quit), F2 (subtitles), F3 (music), +/- (volume via `CheckAdjustSound`).
-- [ ] Missing member `DragSndCursor`/`DragSndCursorMask` in the music game (MMB05): check whether that
+- [x] Missing member `DragSndCursor`/`DragSndCursorMask` *(does not exist anywhere on the disc: a bug in the
+      original, Director falls back to the arrow and so do we)* in the music game (MMB05): check whether that
       is a bug in the original (like the other "member niet gevonden" typos) or a lookup issue in the
       engine.
 
@@ -93,8 +94,9 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 
 - [x] **Fullscreen** (Alt+Enter, `--fullscreen`), resizable window with 4:3 letterbox, per-monitor DPI awareness,
       default window size = largest scale that fits. *(not seen in a window yet: check!)*
-- [ ] Load data straight from the disc image (BIN/CUE, MDF or a real CD drive) instead of a prepared
-      `extract/` folder. `tools/iso.py` has a hard-coded path.
+- [x] Game files found automatically: data folder, `%APPDATA%\SkipperRE\data`, CD drive, or a BIN/CUE/ISO that is
+      extracted once (`src/disc.c`); `start.dxr` is pulled from the Wise installer. *(MDF/MDS not supported;
+      `tools/iso.py` still has a hard-coded path)*
 - [x] Release build (`RELEASE=1 ./build.sh`: -O2, no UBSan), window icon from `Magnus.ico` on the disc.
       *(version info left out)*
 - [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 15 checks, ~1 minute)* (13 hotspots + walk/drag/mailbox/boss scenarios) as a script, for

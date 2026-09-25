@@ -18,7 +18,8 @@
 | `Intro.dxr`, `Magnus1.dxr`, `Mmtutor.dxr` | intro, extra film, tutorial |
 | `SETUP.EXE` | 16-bit Wise-installer (draait niet op Win11 x64). Payload: `start32.exe` (Director 5 projector, 32-bit, stroom 15), `start16.exe` (stroom 16) |
 | `DLLGLUE.DLL`, `FILEIO.DLL`, `INI.DLL`, `MOVUTILS.DLL` | 16-bit XObjects; `POMLITE.X32` = PrintOMatic Lite Xtra |
-| `Video\*.avi`, `Catalog\`, `VFW\` | ongebruikt door het spel (Deense video's, Transposia-catalogus, Video for Windows) |
+| `Video\*.avi` | 26 Cinepak-filmpjes (320x240, 15 fps, 8-bit PCM) voor het ABC-spel (MMB09), gekoppelde `digitalVideo`-leden |
+| `Catalog\`, `VFW\` | ongebruikt door het spel (Transposia-catalogus met demo's, Video for Windows) |
 
 Alle films: codec `MV93`/`MC95`, `VWCF` directorVersion 1217 = **Director 5**.
 
