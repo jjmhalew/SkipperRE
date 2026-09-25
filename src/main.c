@@ -5,6 +5,7 @@
  *               [--click x y F]      (headless: klik op (x,y) vlak voor frame F)
  *               [--drag x1 y1 x2 y2 F] (headless: slepen van (x1,y1) naar (x2,y2) vlak voor frame F)
  *               [--key code char F]  (headless: toets met Mac-keyCode en teken (ASCII) vlak voor frame F)
+ *               [--global naam int F] (headless: global op een getal zetten vlak voor frame F)
  */
 #include "dir.h"
 #include <stdlib.h>
@@ -474,6 +475,8 @@ int main(int argc, char **argv) {
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
     int drags[16][5], ndrags = 0;
     int keys[64][3], nkeys = 0;
+    struct { const char *name; int val, frame; } globs[16];
+    int nglobs = 0;
     char bin[300] = "";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
@@ -500,6 +503,11 @@ int main(int argc, char **argv) {
             printf("%dx%d, %d frames, %d ticks, audio %d samples\n", video_width(v), video_height(v), video_frames(v),
                    video_duration(v), video_audio(v) ? video_audio(v)->frames : 0);
             return 0;
+        }
+        else if (!strcmp(argv[i], "--global") && i + 3 < argc && nglobs < 16) {
+            globs[nglobs].name = argv[++i];
+            globs[nglobs].val = atoi(argv[++i]);
+            globs[nglobs++].frame = atoi(argv[++i]);
         }
         else if (!strcmp(argv[i], "--every") && i + 1 < argc) every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--dump")) dump = 1;
@@ -529,6 +537,12 @@ int main(int argc, char **argv) {
                     P.mouse_down = 0;   /* headless: de knop geldt meteen als losgelaten */
                     player_mouse(clicks[k][0], clicks[k][1], 1, 0, 0);
                     player_mouse(clicks[k][0], clicks[k][1], 0, 1, 0);
+                }
+            for (int k = 0; k < nglobs; k++)
+                if (frames == globs[k].frame) {   /* headless: global zetten (testen: gPoints enz.) */
+                    Datum *g = global_ref(sym(globs[k].name));
+                    d_unref(*g);
+                    *g = d_int(globs[k].val);
                 }
             for (int k = 0; k < nkeys; k++)
                 if (frames == keys[k][2]) {   /* headless: toets (Mac-keyCode, teken) neer en los */

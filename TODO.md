@@ -63,15 +63,16 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       session → D5, 3 points, coin in the pocket; the load dialog appears at startup when saves exist)*: F6 → `mmdlg3` (type a name, 16 slots), F5 → load, and "save before quitting"
       (`mmdlg2` → `mmdlg3 LeaveGame`). Check that `MMSAVn.MMS` / `MAGNUS.INI` in `%APPDATA%\SkipperRE`
       are written and restored correctly (all object flags through `GetFlags`/`LoadFlags`).
-- [ ] **Options** (`mmdlg1`, F7), **map** (`mmdlg4`, map icon in the pocket), **reward** (`mmdlg5` at
-      ≥ 50 points), **tutorial** (`mmtutor`, F1). *(options, map and tutorial open and render; the actorList bug
-      that overwrote dialog sprites is fixed; reward screen and clicking through still to do)*
+- [x] **Options** (`mmdlg1`, F7), **map** (`mmdlg4`, map icon in the pocket), **reward** (`mmdlg5` at
+      ≥ 50 points), **tutorial** (`mmtutor`, F1). *(all four verified headless: options (incl. subtitle label after
+      the actorList fix), map, tutorial, and the reward mirror via the mirror at ≥ 50 points)*
 - [ ] **All 12 minigames** actually playable: rounds, scoring, back to the room. Only the first screen +
       clicks are tested now.
 - [ ] **Whole adventure**: 47 locations, all puzzles (`JobIsDone` requires 18 conditions: mirror,
       bucket, pacifier, nut, letter, dice, food, nose, trousers, crown, broom, hat, flowers, …).
       Mainly check the animation chains (`AnimEnd` via `gAnimNotify`, only fixed on 2026-09-25).
-- [ ] **Ending**: `CheckDone` → `go(1, "magnus1")` (`Magnus1.dxr`, never started yet; uses
+- [x] **Ending** *(verified headless with `--movie Magnus1`: all scenes, dragging the wand to the fairy, celebration,
+      credits)*: `CheckDone` → `go(1, "magnus1")` (`Magnus1.dxr`, never started yet; uses
       transition cast members).
 - [ ] Other keys: Esc (quit), F2 (subtitles), F3 (music), +/- (volume via `CheckAdjustSound`).
 - [ ] Missing member `DragSndCursor`/`DragSndCursorMask` in the music game (MMB05): check whether that
