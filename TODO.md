@@ -81,9 +81,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 
 ## P2 — fidelity (needs someone watching/listening in a window)
 
-- [ ] **Transitions**: types 1–10 are implemented, all others (e.g. `puppetTransition(23)` and some
-      transition members in Intro/Magnus1/Mmtutor) fall back to a generic dissolve. Chunk size and
-      timing are approximate.
+- [x] **Transitions** *(all 52 Director types in `src/trans.c`, with chunk size; transition members were decoded
+      wrongly (type is spec[2], duration spec[4..5] in ms, chunk spec[1]); check with `--transtest dir`)*
 - [ ] Timing/tempo against the original (frame rate, `Wait`/`startTimer` loops, speech sync).
 - [ ] Sound: volume levels, background music loops, cut-offs in `puppetSound`.
 - [ ] Text rendering (subtitle bar, score, dialog fields) against the original fonts and sizes.

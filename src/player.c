@@ -381,10 +381,12 @@ static void enter_frame(int first) {
         if (fr->trans && !first) {
             CastLib *cl;
             Member *m = movie_member(mv, fr->trans_lib, fr->trans, &cl);
-            if (m && m->speclen >= 4) {
+            if (m && m->speclen >= 6) {   /* transitie-lid: [?, chunk, type, gebied, duur ms (be16)] */
                 P.trans_pending = 1;
-                P.trans_type = m->spec[3];
-                P.trans_dur = m->spec[1] * 250 / 4;
+                P.trans_chunk = m->spec[1];
+                P.trans_type = m->spec[2];
+                P.trans_dur = m->spec[4] << 8 | m->spec[5];
+                if (P.trans_dur <= 0) P.trans_dur = 100;   /* 0 = zo snel mogelijk */
             }
         }
     }

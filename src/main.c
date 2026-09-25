@@ -239,32 +239,14 @@ static void blit(const uint32_t *px) {
 static void pump(void);
 
 /* Director-transities (codes 1..52): een benadering met wipes/center-out/dissolve */
-static void transition(const uint32_t *from, const uint32_t *to, int type, int dur) {
+static void transition(const uint32_t *from, const uint32_t *to, int type, int dur, int chunk) {
     if (g_headless || dur <= 0) return;
     static uint32_t tmp[640 * 480];
     uint32_t t0 = now_ms();
     for (;;) {
         double t = (double)(now_ms() - t0) / dur;
         if (t >= 1) break;
-        for (int y = 0; y < 480; y++)
-            for (int x = 0; x < 640; x++) {
-                int i = y * 640 + x, show;
-                double cx = fabs((double)x - 320) / 320.0, cy = fabs((double)y - 240) / 240.0;
-                switch (type) {
-                case 1: show = x < t * 640; break;                    /* wipe right */
-                case 2: show = x > (1 - t) * 640; break;              /* wipe left */
-                case 3: show = y < t * 480; break;                    /* wipe down */
-                case 4: show = y > (1 - t) * 480; break;              /* wipe up */
-                case 5: show = cx < t; break;                         /* center out horizontal */
-                case 6: show = cx > 1 - t; break;                     /* edges in horizontal */
-                case 7: show = cy < t; break;                         /* center out vertical */
-                case 8: show = cy > 1 - t; break;                     /* edges in vertical */
-                case 9: show = cx < t && cy < t; break;               /* center out square */
-                case 10: show = cx > 1 - t || cy > 1 - t; break;      /* edges in square */
-                default: show = ((x * 7 + y * 13) * 2654435761u >> 24) / 255.0 < t; break;
-                }
-                tmp[i] = show ? to[i] : from[i];
-            }
+        trans_frame(tmp, from, to, type, chunk, t);
         blit(tmp);
         pump();
         Sleep(10);
@@ -276,7 +258,7 @@ void stage_present(void) {
     if (!g_prev) g_prev = calloc(640 * 480, 4);
     if (P.trans_pending) {
         P.trans_pending = 0;
-        transition(g_prev, stage_px, P.trans_type, P.trans_dur > 2000 ? 2000 : P.trans_dur);
+        transition(g_prev, stage_px, P.trans_type, P.trans_dur > 2000 ? 2000 : P.trans_dur, P.trans_chunk);
     }
     blit(stage_px);
     memcpy(g_prev, stage_px, 640 * 480 * 4);
@@ -494,6 +476,21 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--key") && i + 3 < argc && nkeys < 64) {
             for (int k = 0; k < 3; k++) keys[nkeys][k] = atoi(argv[++i]);
             nkeys++;
+        }
+        else if (!strcmp(argv[i], "--transtest") && i + 1 < argc) {   /* test: alle transities op t = 0.35 */
+            static uint32_t a[640 * 480], b[640 * 480], o[640 * 480];
+            for (int y = 0; y < 480; y++)
+                for (int x = 0; x < 640; x++) {   /* oud: blauw met raster, nieuw: oranje met diagonalen */
+                    a[y * 640 + x] = ((x % 80 < 4) || (y % 80 < 4)) ? 0xffffffffu : 0xff2040c0u | (uint32_t)(y * 255 / 480) << 8;
+                    b[y * 640 + x] = ((x + y) % 60 < 6) ? 0xff000000u : 0xfff09020u | (uint32_t)(x * 255 / 640);
+                }
+            for (int ty = 1; ty <= 52; ty++) {
+                char path[300];
+                trans_frame(o, a, b, ty, 8, 0.35);
+                snprintf(path, sizeof path, "%s/t%02d.bmp", argv[i + 1], ty);
+                bmp_write(path, o, 640, 480);
+            }
+            return 0;
         }
         else if (!strcmp(argv[i], "--avi") && i + 3 < argc) {   /* test: één videoframe naar BMP */
             Video *v = video_open(argv[i + 1]);

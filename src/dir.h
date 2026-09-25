@@ -363,6 +363,7 @@ Sound *video_audio(Video *v);
 Video *member_video(Member *m);   /* laadt het gekoppelde AVI-bestand lui */
 void bmp_write(const char *path, const uint32_t *px, int w, int h);
 uint32_t *stage_bitmap_argb(Bitmap *bm);
+void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t);
 int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintOMatic-document is */
 void host_print(const uint32_t *px, int w, int h, int landscape, const char *name);
 int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
