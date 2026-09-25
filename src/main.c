@@ -497,8 +497,26 @@ static void pump(void) {
     }
 }
 
+/* headless slepen: zolang een script in `repeat while the stillDown` wacht, beweegt host_pump de muis in
+ * stappen naar het doel en laat daarna los (zoals een echte gebruiker) */
+static int g_hd_active, g_hd_x0, g_hd_y0, g_hd_x1, g_hd_y1, g_hd_step;
+#define HD_STEPS 12
+
 void host_pump(void) {
-    if (g_headless) return;
+    if (g_headless) {
+        if (g_hd_active) {
+            if (g_hd_step < HD_STEPS) {
+                g_hd_step++;
+                P.mouse_x = g_hd_x0 + (g_hd_x1 - g_hd_x0) * g_hd_step / HD_STEPS;
+                P.mouse_y = g_hd_y0 + (g_hd_y1 - g_hd_y0) * g_hd_step / HD_STEPS;
+                player_drag_update();
+            } else {
+                P.mouse_down = 0;
+                g_hd_active = 0;
+            }
+        }
+        return;
+    }
     pump();
     if (player_drag_update() || P.update_needed) stage_present();   /* scripts die in een lus wachten, zien toch hun updateStage */
 }
@@ -694,7 +712,10 @@ int main(int argc, char **argv) {
                 if (frames == drags[k][4]) {   /* headless: neer op (x1,y1), slepen naar (x2,y2), los */
                     P.mouse_x = drags[k][0]; P.mouse_y = drags[k][1];
                     P.mouse_down = 1;
-                    player_mouse(drags[k][0], drags[k][1], 1, 0, 0);
+                    g_hd_active = 1; g_hd_step = 0;
+                    g_hd_x0 = drags[k][0]; g_hd_y0 = drags[k][1]; g_hd_x1 = drags[k][2]; g_hd_y1 = drags[k][3];
+                    player_mouse(drags[k][0], drags[k][1], 1, 0, 0);   /* kan zelf slepen via host_pump */
+                    g_hd_active = 0;
                     player_mouse(drags[k][2], drags[k][3], 0, 0, 0);
                     P.mouse_down = 0;
                     player_mouse(drags[k][2], drags[k][3], 0, 1, 0);
