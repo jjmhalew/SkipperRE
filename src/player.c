@@ -29,6 +29,7 @@ static Window *win_find(const char *name, int create) {
     if (!create) return NULL;
     Window *w = calloc(1, sizeof *w);
     snprintf(w->name, sizeof w->name, "%s", name);
+    w->visible = 1;
     w->next = P.windows;
     P.windows = w;
     return w;
@@ -405,9 +406,9 @@ int player_tick(void) {
     if (P.halted || !P.mv) return 100;
     CP = &P;
     palette_step();
-    ctx_tick();
+    if (!P.paused) ctx_tick();
     for (Window *w = P.windows; w; w = w->next)
-        if (w->open && w->ctx && w->ctx->mv) {
+        if (w->open && w->ctx && w->ctx->mv && !w->ctx->paused) {
             CP = w->ctx;
             ctx_tick();
             CP = &P;
@@ -443,6 +444,10 @@ void player_mouse(int x, int y, int down, int up, int right) {
     }
     Window *w = top_window_at(x, y);
     Window *mw = modal_window();
+    if (vm_trace)
+        for (Window *k = P.windows; k; k = k->next)
+            fprintf(stderr, "[muis %d,%d] venster %s open %d modal %d rect %d,%d-%d,%d %s\n", x, y, k->name, k->open,
+                    k->modal, k->l, k->t, k->r, k->b, k == w ? "(geraakt)" : "");
     if (mw && w != mw) return;
     Player *save = CP;
     int lx = x, ly = y;
@@ -450,19 +455,17 @@ void player_mouse(int x, int y, int down, int up, int right) {
     else CP = &P;
     int ev;
     if (down) {
-        P.mouse_down = 1;
         ev = sym(right ? "rightMouseDown" : "mouseDown");
         int ch = sprite_under(lx, ly, 1);
         P.click_on = ch;
         P.last_click = (int)now_ms();
-        if (!right && run_primary(P.mouse_down_script)) { CP = save; return; }
+        if (!right && run_primary(CP->mouse_down_script)) { CP = save; return; }
         if (ch) sprite_event(ch, ev); else frame_event(ev);
         /* moveableSprite: slepen gebeurt in main.c via the stillDown/mouseH (de scripts doen het zelf) */
     } else {
-        P.mouse_down = 0;
         ev = sym(right ? "rightMouseUp" : "mouseUp");
         int ch = sprite_under(lx, ly, 1);
-        if (!right && run_primary(P.mouse_up_script)) { CP = save; return; }
+        if (!right && run_primary(CP->mouse_up_script)) { CP = save; return; }
         if (ch) sprite_event(ch, ev); else frame_event(ev);
     }
     vm_abort = 0;
@@ -477,9 +480,9 @@ void player_key(int code, int ch, int down) {
     Player *save = CP;
     CP = mw ? mw->ctx : &P;
     if (down) {
-        if (!run_primary(P.key_down_script)) frame_event(sym("keyDown"));
+        if (!run_primary(CP->key_down_script)) frame_event(sym("keyDown"));
     } else {
-        if (!run_primary(P.key_up_script)) frame_event(sym("keyUp"));
+        if (!run_primary(CP->key_up_script)) frame_event(sym("keyUp"));
     }
     vm_abort = 0;
     CP = save;
@@ -503,9 +506,12 @@ Datum player_the(int name) {
         return str_of(buf);
     }
     if (!_stricmp(n, "movieName") || !_stricmp(n, "movie")) return str_of(CP->mv ? CP->mv->name : "");
-    if (!_stricmp(n, "stillDown") || !_stricmp(n, "mouseDown")) return d_int(P.mouse_down);
+    if (!_stricmp(n, "stillDown") || !_stricmp(n, "mouseDown")) {
+        host_pump();
+        return d_int(P.mouse_down && !P.release_pending);
+    }
     if (!_stricmp(n, "mouseUp")) return d_int(!P.mouse_down);
-    if (!_stricmp(n, "mouseH")) return d_int(P.mouse_x);
+    if (!_stricmp(n, "mouseH")) { host_pump(); return d_int(P.mouse_x); }
     if (!_stricmp(n, "mouseV")) return d_int(P.mouse_y);
     if (!_stricmp(n, "clickLoc")) return d_point(P.mouse_x, P.mouse_y);
     if (!_stricmp(n, "doubleClick")) return d_int(0);
@@ -543,10 +549,10 @@ static const char *MEMBER_PROPS[] = {NULL, "name", "text", "textStyle", "textFon
 Datum player_get(int type, int id, Datum *tg, int nt) {
     switch (type) {
     case 0:
-        if (id == 1) return d_ref(P.mouse_down_script);
-        if (id == 2) return d_ref(P.mouse_up_script);
-        if (id == 3) return d_ref(P.key_down_script);
-        if (id == 4) return d_ref(P.key_up_script);
+        if (id == 1) return d_ref(CP->mouse_down_script);
+        if (id == 2) return d_ref(CP->mouse_up_script);
+        if (id == 3) return d_ref(CP->key_down_script);
+        if (id == 4) return d_ref(CP->key_up_script);
         if (id > 11 && nt) {
             /* the last char/word/item/line in x */
             Str *s = d_asstr(tg[0]);
@@ -602,8 +608,8 @@ void player_set(int type, int id, Datum *tg, int nt, Datum v) {
     switch (type) {
     case 0:
         if (id >= 1 && id <= 4) {
-            Datum *slot = id == 1 ? &P.mouse_down_script : id == 2 ? &P.mouse_up_script
-                        : id == 3 ? &P.key_down_script : &P.key_up_script;
+            Datum *slot = id == 1 ? &CP->mouse_down_script : id == 2 ? &CP->mouse_up_script
+                        : id == 3 ? &CP->key_down_script : &CP->key_up_script;
             d_unref(*slot);
             *slot = v;
             return;
@@ -885,7 +891,13 @@ Datum player_objprop(Datum o, int name) {
     case T_MEMBER: return member_get(o, name);
     case T_WINDOW: {
         Window *w = o.u.w;
-        if (!_stricmp(n, "rect")) return d_rect(w->l, w->t, w->r, w->b);
+        if (!_stricmp(n, "rect")) {
+            if (w->r <= w->l && w->file[0]) {
+                Movie *mv = movie_get(w->file);
+                if (mv) return d_rect(0, 0, mv->stage_w, mv->stage_h);
+            }
+            return d_rect(w->l, w->t, w->r, w->b);
+        }
         if (!_stricmp(n, "visible")) return d_int(w->visible);
         if (!_stricmp(n, "name")) return d_str(w->name);
         if (!_stricmp(n, "fileName")) return d_str(w->file);
@@ -1170,7 +1182,6 @@ static void window_open(Window *w) {
     if (!mv) return;
     if (w->r <= w->l) { w->l = (640 - mv->stage_w) / 2; w->t = (480 - mv->stage_h) / 2; w->r = w->l + mv->stage_w; w->b = w->t + mv->stage_h; }
     w->open = 1;
-    w->visible = 1;
     Player *save = CP;
     CP = w->ctx;
     movie_switch(mv, 1);
@@ -1207,6 +1218,15 @@ static Datum bi_forget(Datum *a, int n) {
         if (*pp) *pp = w->next;
         /* niet vrijgeven: er kunnen nog Datums naar wijzen */
     }
+    return VOIDD;
+}
+
+static Datum bi_pause(Datum *a, int n) { (void)a; (void)n; CP->paused = 1; return VOIDD; }
+static Datum bi_continue(Datum *a, int n) { (void)a; (void)n; P.paused = 0; CP->paused = 0; return VOIDD; }
+static Datum bi_do(Datum *a, int n) {
+    Str *s = d_asstr(ARG(0));
+    lingo_do(s->s);
+    if (--s->rc == 0) free(s);
     return VOIDD;
 }
 
@@ -1260,8 +1280,9 @@ void builtins_register(void) {
     vm_register("preloadMember", bi_noop);
     vm_register("unLoadCast", bi_noop);
     vm_register("unloadMember", bi_noop);
-    vm_register("pause", bi_noop);
-    vm_register("continue", bi_noop);
+    vm_register("pause", bi_pause);
+    vm_register("continue", bi_continue);
+    vm_register("do", bi_do);
     vm_register("erase", bi_noop);
     vm_register("print", bi_noop);
     vm_register("setDocumentName", bi_noop);

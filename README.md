@@ -21,6 +21,41 @@ Wise-installer gehaalde `start32.exe` in `game/` (beide staan in `.gitignore`).
 - **Decompiler** (`tools/lingodec.py`): leesbare Lingo van alle films
 - **Score, labels, cast-libs** (`tools/score.py`), frame renderen met inks 0/8/36
 - **Startfilm uit de projector** (`tools/projector.py`)
+- **Native engine in C** (`src/`): eigen Director 5-runtime die de originele films afspeelt. De hele
+  opstartketen draait (start → INTRO → Magnus), Skipper's kamer met Skipper en Skeeto, dialogen met
+  ondertitels, en de minigames openen vanuit de boekenplank (MMB09 getest).
+
+## Native engine
+| Bestand | Wat |
+|---|---|
+| `src/dfile.c` | RIFX-container, interne en externe casts (per eigenaar-id), bitmaps, `snd `, STXT, scripts, score |
+| `src/lingo.c` | waarden (refcounted), symbolen, globals, de bytecode-VM, objecten met ancestor-keten |
+| `src/builtins.c` | lijsten, proplijsten, strings, rekenen, types |
+| `src/player.c` | films, frames, events (sprite → castlid → frame → movie), puppets, sprite-/member-properties, `go`, paletten, transities, MIAW-vensters |
+| `src/stage.c` | compositie naar 32-bit met inks (copy, matte, bg transparent, blend, ...), tekst via GDI, vormen, filmloops |
+| `src/xobj.c` | INI, FileIO, MovUtils, DLLGlue → MMSYS.DLL (CD-audio, LoadSaveGame), KEYBOARD.DLL, USER.EXE |
+| `src/sound.c` | waveOut-mixer, CD-audio rechtstreeks uit `SKIPPER_1.BIN` via de `.CUE` |
+| `src/main.c` | Win32-venster, timing, invoer (Mac-keyCodes), cursors, headless testmodus, crash-handler |
+| `src/dbgheap.c` | debug-heap (`DEFS=-DDBGHEAP`): canaries + quarantaine, meldt bestand:regel |
+
+Semantiek die uit het spel bleek (en die de port nodig had):
+- `birth(script "X")` / `new` is altijd de constructor, ook als het aanroepende script zelf `birth` heeft.
+- Een script of object als eerste argument krijgt de aanroep (`Event(script "LocScriptC5", ...)`),
+  ook bij een lokale aanroep (`mouseUp(script "HSC5ABC")` vanuit een script met eigen `mouseUp`).
+- `objcallv4` op een naam: het eerste argument (symbool) is de naam van een variabele (local/arg/property).
+- Hotspots zijn vormen met ink 36 en fore = back: onzichtbaar maar klikbaar.
+- Filmloop-sprites met castLib -1 verwijzen naar de cast van de loop zelf.
+
+```bash
+./build.sh                                   # out/skipper.exe (debug-build met UBSan + PDB)
+OPT=-O0 DEFS=-DDBGHEAP ./build.sh            # met debug-heap
+./out/skipper.exe extract                    # spelen (venster 2x, geluid, CD-muziek uit ../SKIPPER_1.BIN)
+./out/skipper.exe extract --bin D:/pad/SKIPPER_1.BIN --scale 1
+# headless testen: N frames draaien, klikken, periodiek screenshots, globals/kanalen dumpen
+./out/skipper.exe extract --click 320 240 170 --click 400 100 300 --shot 700 out/run --every 50 --dump
+python tools/filmstrip.py out/run out/strip.png 6
+```
+Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
 
 ## Gebruik
 ```bash

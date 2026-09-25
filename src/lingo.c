@@ -887,6 +887,7 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             if (nm == sym("return")) {
                 d_unref(fr.ret);
                 fr.ret = a.u.l->n ? d_ref(a.u.l->v[0]) : VOIDD;
+                fr.done = 1;   /* return beëindigt de handler (er volgt geen ret in de bytecode) */
                 res = VOIDD;
             } else if (nm == sym("pass")) {
                 vm_pass = 1;   /* de eventdispatcher kijkt hiernaar; alleen deze handler stopt */
@@ -1194,7 +1195,8 @@ void lingo_do(const char *s) {
     }
     Datum args[8];
     int n = 0;
-    while (*p && n < 8) {
+    if (*p == '(') p = skipws(p + 1);   /* do("Handler(1, 2)") */
+    while (*p && *p != ')' && n < 8) {
         args[n++] = parse_value(&p);
         p = skipws(p);
         if (*p == ',') p = skipws(p + 1);

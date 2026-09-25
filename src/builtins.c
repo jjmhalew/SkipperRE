@@ -272,6 +272,7 @@ static Datum bi_charToNum(Datum *a, int n) {
 }
 static Datum bi_numToChar(Datum *a, int n) { char c = (char)d_toint(ARG(0)); return d_strn(&c, 1); }
 static Datum bi_offset(Datum *a, int n) {
+    if (ARG(0).t == T_RECT || ARG(0).t == T_POINT) return bi_offsetRect(a, n);   /* D4: offset(rect, dx, dy) */
     Str *x = d_asstr(ARG(0)), *s = d_asstr(ARG(1));
     int r = 0;
     for (int i = 0; i + x->len <= s->len && !r; i++) {

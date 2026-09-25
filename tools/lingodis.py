@@ -109,10 +109,12 @@ def decode(code):
                 arg = struct.unpack('>i', code[i:i + 4])[0]; i += 4
             elif op >= 0x80:
                 arg = struct.unpack('>H', code[i:i + 2])[0]; i += 2
-                if base in (0x41, 0x6e):  # pushint signed
+                if base in (0x41, 0x6e):  # pushint signed (2 bytes)
                     arg = struct.unpack('>h', code[i - 2:i])[0]
             else:
                 arg = code[i]; i += 1
+                if base == 0x41 and arg >= 0x80:  # pushint8 is signed
+                    arg -= 256
             out.append((pos, OPSN.get(base, f'op{base:02x}'), arg))
         else:
             out.append((pos, OPS1.get(op, f'op{op:02x}'), None))

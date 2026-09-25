@@ -12,12 +12,12 @@
 #include <dbghelp.h>
 
 extern int sound_headless;
+static HWND g_hwnd;
+static int g_headless;
 void palette_step(void);
 void player_idle(void);
 
-static HWND g_hwnd;
 static int g_scale = 2;
-static int g_headless;
 static uint32_t *g_prev;       /* laatst getoonde stage (voor transities) */
 
 uint32_t now_ms(void) { return GetTickCount(); }
@@ -40,10 +40,102 @@ char *path_resolve(const char *p, char *out, int n) {
     return out;
 }
 
-/* MMSYS.LoadSaveGame: het origineel toont een dialoog met spelposities. Voorlopig: positie 1. */
+/* MMSYS.LoadSaveGame(hwnd, isLoad): dialoog met 16 spelposities. De namen staan in
+ * <gMMPath>\MAGNUS.INI [Saved games] GAMEn (SavedGamesExists leest die ook); het spel zelf schrijft
+ * daarna MMSAVn.MMS. Geeft het gekozen nummer terug, 0 = annuleren. */
+static int g_dlg_done, g_dlg_result;
+static HWND g_dlg_list, g_dlg_edit;
+
+static LRESULT CALLBACK dlg_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
+    switch (msg) {
+    case WM_COMMAND:
+        if (LOWORD(wp) == 1 || (LOWORD(wp) == 10 && HIWORD(wp) == LBN_DBLCLK)) { g_dlg_result = 1; g_dlg_done = 1; return 0; }
+        if (LOWORD(wp) == 2) { g_dlg_result = 0; g_dlg_done = 1; return 0; }
+        if (LOWORD(wp) == 10 && HIWORD(wp) == LBN_SELCHANGE && g_dlg_edit) {
+            char buf[80];
+            int i = (int)SendMessageA(g_dlg_list, LB_GETCURSEL, 0, 0);
+            SendMessageA(g_dlg_list, LB_GETTEXT, i, (LPARAM)buf);
+            char *p = strchr(buf, '\t');
+            SetWindowTextA(g_dlg_edit, p && strcmp(p + 1, "(leeg)") ? p + 1 : "");
+        }
+        break;
+    case WM_CLOSE: g_dlg_result = 0; g_dlg_done = 1; return 0;
+    }
+    return DefWindowProcA(h, msg, wp, lp);
+}
+
 int ld_save_game(int is_load) {
-    (void)is_load;
-    return 1;
+    if (g_headless) return 0;
+    char ini[600];
+    snprintf(ini, sizeof ini, "%s\\MAGNUS.INI", P.save_dir);
+    static int reg;
+    if (!reg) {
+        WNDCLASSA wc = {0};
+        wc.lpfnWndProc = dlg_proc;
+        wc.hInstance = GetModuleHandle(NULL);
+        wc.lpszClassName = "SkipperDlg";
+        wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        RegisterClassA(&wc);
+        reg = 1;
+    }
+    RECT pr;
+    GetWindowRect(g_hwnd, &pr);
+    int w = 360, hgt = is_load ? 400 : 440;
+    HWND d = CreateWindowA("SkipperDlg", is_load ? "Spel laden" : "Spel opslaan", WS_POPUP | WS_CAPTION | WS_SYSMENU,
+                           (pr.left + pr.right - w) / 2, (pr.top + pr.bottom - hgt) / 2, w, hgt, g_hwnd, NULL, NULL, NULL);
+    HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+    g_dlg_list = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY | LBS_USETABSTOPS,
+                               10, 10, w - 26, 300, d, (HMENU)10, NULL, NULL);
+    SendMessageA(g_dlg_list, WM_SETFONT, (WPARAM)font, 0);
+    for (int i = 1; i <= 16; i++) {
+        char key[16], name[64], line[96];
+        snprintf(key, sizeof key, "GAME%d", i);
+        GetPrivateProfileStringA("Saved games", key, "", name, sizeof name, ini);
+        snprintf(line, sizeof line, "%d.\t%s", i, name[0] ? name : "(leeg)");
+        SendMessageA(g_dlg_list, LB_ADDSTRING, 0, (LPARAM)line);
+    }
+    SendMessageA(g_dlg_list, LB_SETCURSEL, 0, 0);
+    int y = 316;
+    g_dlg_edit = NULL;
+    if (!is_load) {
+        HWND lbl = CreateWindowA("STATIC", "Naam:", WS_CHILD | WS_VISIBLE, 10, y + 4, 50, 20, d, NULL, NULL, NULL);
+        SendMessageA(lbl, WM_SETFONT, (WPARAM)font, 0);
+        g_dlg_edit = CreateWindowA("EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, 60, y, w - 76, 24, d, NULL, NULL, NULL);
+        SendMessageA(g_dlg_edit, WM_SETFONT, (WPARAM)font, 0);
+        SendMessageA(g_dlg_edit, EM_LIMITTEXT, 40, 0);
+        y += 34;
+    }
+    HWND ok = CreateWindowA("BUTTON", is_load ? "Laden" : "Opslaan", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, w - 196, y, 85, 28, d, (HMENU)1, NULL, NULL);
+    HWND cancel = CreateWindowA("BUTTON", "Annuleren", WS_CHILD | WS_VISIBLE, w - 104, y, 85, 28, d, (HMENU)2, NULL, NULL);
+    SendMessageA(ok, WM_SETFONT, (WPARAM)font, 0);
+    SendMessageA(cancel, WM_SETFONT, (WPARAM)font, 0);
+    ShowWindow(d, SW_SHOW);
+    EnableWindow(g_hwnd, FALSE);
+    g_dlg_done = 0;
+    g_dlg_result = 0;
+    int slot = 0;
+    MSG m;
+    while (!g_dlg_done && GetMessageA(&m, NULL, 0, 0) > 0) {
+        if (!IsDialogMessageA(d, &m)) { TranslateMessage(&m); DispatchMessageA(&m); }
+        if (g_dlg_done && g_dlg_result) {
+            slot = (int)SendMessageA(g_dlg_list, LB_GETCURSEL, 0, 0) + 1;
+            char key[16], name[64] = "";
+            snprintf(key, sizeof key, "GAME%d", slot);
+            if (is_load) {
+                GetPrivateProfileStringA("Saved games", key, "", name, sizeof name, ini);
+                if (!name[0]) { g_dlg_done = 0; slot = 0; MessageBeep(MB_ICONWARNING); }   /* lege positie: blijf */
+            } else {
+                GetWindowTextA(g_dlg_edit, name, sizeof name);
+                if (!name[0]) snprintf(name, sizeof name, "Spel %d", slot);
+                WritePrivateProfileStringA("Saved games", key, name, ini);
+            }
+        }
+    }
+    EnableWindow(g_hwnd, TRUE);
+    DestroyWindow(d);
+    SetForegroundWindow(g_hwnd);
+    return g_dlg_result ? slot : 0;
 }
 
 static void setup_save_dir(void) {
@@ -203,16 +295,40 @@ static int mac_keycode(int vk) {
 
 static int g_pending_char;
 
+/* Invoer: de vensterprocedure werkt alleen de toestand bij (muispositie, knop) en zet events in een
+ * wachtrij; main() dispatcht ze als er geen Lingo loopt. Zo kan een script dat
+ * `repeat while the stillDown` doet via host_pump() de echte knop zien zonder dat events
+ * midden in een handler binnenkomen. */
+typedef struct InEv { int kind, x, y, a, b; } InEv;   /* kind: 1 muis neer, 2 muis op, 3 toets neer, 4 toets op */
+static InEv g_q[256];
+static int g_qh, g_qt;
+static void qpush(int kind, int x, int y, int a, int b) {
+    int n = (g_qt + 1) & 255;
+    if (n == g_qh) return;
+    g_q[g_qt] = (InEv){kind, x, y, a, b};
+    g_qt = n;
+}
+
+static void drain_input(void) {
+    while (g_qh != g_qt) {
+        InEv e = g_q[g_qh];
+        g_qh = (g_qh + 1) & 255;
+        if (e.kind == 1) player_mouse(e.x, e.y, 1, 0, e.a);
+        else if (e.kind == 2) player_mouse(e.x, e.y, 0, 1, e.a);
+        else player_key(e.a, e.b, e.kind == 3);
+    }
+}
+
 static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     int x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
     switch (msg) {
     case WM_CLOSE: P.halted = 2; return 0;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); EndPaint(h, &ps); if (stage_px) blit(stage_px); return 0; }
-    case WM_MOUSEMOVE: player_mouse(x, y, 0, 0, 0); return 0;
-    case WM_LBUTTONDOWN: SetCapture(h); player_mouse(x, y, 1, 0, 0); return 0;
-    case WM_LBUTTONUP: ReleaseCapture(); player_mouse(x, y, 0, 1, 0); return 0;
-    case WM_RBUTTONDOWN: player_mouse(x, y, 1, 0, 1); return 0;
-    case WM_RBUTTONUP: player_mouse(x, y, 0, 1, 1); return 0;
+    case WM_MOUSEMOVE: P.mouse_x = x; P.mouse_y = y; return 0;
+    case WM_LBUTTONDOWN: SetCapture(h); P.mouse_x = x; P.mouse_y = y; P.mouse_down = 1; qpush(1, x, y, 0, 0); return 0;
+    case WM_LBUTTONUP: ReleaseCapture(); P.mouse_x = x; P.mouse_y = y; P.mouse_down = 0; qpush(2, x, y, 0, 0); return 0;
+    case WM_RBUTTONDOWN: qpush(1, x, y, 1, 0); return 0;
+    case WM_RBUTTONUP: qpush(2, x, y, 1, 0); return 0;
     case WM_SETCURSOR:
         if (LOWORD(lp) == HTCLIENT) { SetCursor(current_cursor()); return TRUE; }
         break;
@@ -221,10 +337,10 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         int ch = 0;
         if (PeekMessageA(&m, h, WM_CHAR, WM_CHAR, PM_REMOVE)) ch = (int)m.wParam;
         g_pending_char = ch;
-        player_key(mac_keycode((int)wp), ch, 1);
+        qpush(3, 0, 0, mac_keycode((int)wp), ch);
         return 0;
     }
-    case WM_KEYUP: player_key(mac_keycode((int)wp), g_pending_char, 0); return 0;
+    case WM_KEYUP: qpush(4, 0, 0, mac_keycode((int)wp), g_pending_char); return 0;
     }
     return DefWindowProcA(h, msg, wp, lp);
 }
@@ -235,6 +351,12 @@ static void pump(void) {
         TranslateMessage(&m);
         DispatchMessageA(&m);
     }
+}
+
+void host_pump(void) {
+    if (g_headless) return;
+    pump();
+    if (P.update_needed) stage_present();   /* scripts die in een lus wachten, zien toch hun updateStage */
 }
 
 static void make_window(void) {
@@ -319,12 +441,13 @@ int main(int argc, char **argv) {
     uint32_t next = now_ms();
     int frames = 0;
     while (P.halted != 2) {
-        if (!g_headless) pump();
+        if (!g_headless) { pump(); drain_input(); }
         uint32_t t = now_ms();
         if (g_headless || (int32_t)(t - next) >= 0) {
             for (int k = 0; k < nclicks; k++)
                 if (frames == clicks[k][2]) {
-                    player_mouse(clicks[k][0], clicks[k][1], 0, 0, 0);
+                    P.mouse_x = clicks[k][0]; P.mouse_y = clicks[k][1];
+                    P.mouse_down = 0;   /* headless: de knop geldt meteen als losgelaten */
                     player_mouse(clicks[k][0], clicks[k][1], 1, 0, 0);
                     player_mouse(clicks[k][0], clicks[k][1], 0, 1, 0);
                 }

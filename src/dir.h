@@ -322,6 +322,8 @@ typedef struct Player {
     char bin_path[260];
     int trans_pending, trans_type, trans_dur, trans_chunk;
     int cursor;
+    int paused;               /* pause/continue: speelkop van de stage staat stil */
+    int release_pending;      /* headless klik: knop geldt al als losgelaten */
 } Player;
 extern Player P;
 extern Player *CP;
@@ -370,4 +372,5 @@ Datum xobj_factory(const char *name);
 /* platform */
 uint32_t now_ms(void);
 void host_alert(const char *msg);
+void host_pump(void);          /* Windows-berichten verwerken zonder events te dispatchen */
 char *path_resolve(const char *p, char *out, int n);
