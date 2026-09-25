@@ -74,7 +74,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [x] **Ending** *(verified headless with `--movie Magnus1`: all scenes, dragging the wand to the fairy, celebration,
       credits)*: `CheckDone` → `go(1, "magnus1")` (`Magnus1.dxr`, never started yet; uses
       transition cast members).
-- [ ] Other keys: Esc (quit), F2 (subtitles), F3 (music), +/- (volume via `CheckAdjustSound`).
+- [x] Other keys *(verified headless: Esc → quit dialog `mmdlg2`, F2 subtitles off, F3 music off, up/down arrows = volume
+      with meter)*
 - [x] Missing member `DragSndCursor`/`DragSndCursorMask` *(does not exist anywhere on the disc: a bug in the
       original, Director falls back to the arrow and so do we)* in the music game (MMB05): check whether that
       is a bug in the original (like the other "member niet gevonden" typos) or a lookup issue in the
