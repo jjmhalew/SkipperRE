@@ -66,6 +66,7 @@ OPT=-O0 DEFS=-DDBGHEAP ./build.sh            # met debug-heap
 ./out/skipper.exe extract --click 320 240 170 --click 400 100 300 --shot 700 out/run --every 50 --dump
 ./out/skipper.exe extract --click 320 240 170 --click 320 393 300 --drag 100 350 150 450 420 --shot 520 out/coin --dump
 python tools/filmstrip.py out/run out/strip.png 6
+sh tools/regress.sh                          # regressietest: 11 minigames + brievenbus/munt/baas/opslaan
 ```
 Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
 
