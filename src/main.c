@@ -42,7 +42,7 @@ char *path_resolve(const char *p, char *out, int n) {
     snprintf(cand, sizeof cand, "%s\\%s", P.save_dir, b);
     if (GetFileAttributesA(cand) != INVALID_FILE_ATTRIBUTES) { snprintf(out, n, "%s", cand); return out; }
     snprintf(cand, sizeof cand, "%s\\%s", P.base_dir, b);
-    if (GetFileAttributesA(cand) != INVALID_FILE_ATTRIBUTES) { snprintf(out, n, "%s", cand); return out; }
+    if (vfs_exists(cand)) { snprintf(out, n, "%s", cand); return out; }
     snprintf(out, n, "%s\\%s", P.save_dir, b);   /* nieuw bestand: in de opslagmap */
     return out;
 }
@@ -530,6 +530,7 @@ static void make_window(void) {
     char ico[300];   /* het icoon van de cd (Magnus.ico in de datamap) */
     snprintf(ico, sizeof ico, "%s\\Magnus.ico", P.base_dir);
     wc.hIcon = (HICON)LoadImageA(NULL, ico, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    if (!wc.hIcon) wc.hIcon = LoadIcon(wc.hInstance, MAKEINTRESOURCE(1));   /* in de exe (build.sh) */
     if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
     RegisterClassA(&wc);
     DWORD style = WS_OVERLAPPEDWINDOW;
@@ -632,6 +633,10 @@ int main(int argc, char **argv) {
             return 0;
         }
         else if (!strcmp(argv[i], "--avi") && i + 3 < argc) {   /* test: één videoframe naar BMP */
+            char ed[MAX_PATH], *sl;   /* ook uit een exe met ingepakte bestanden: <exemap>\Video\x.avi */
+            GetModuleFileNameA(NULL, ed, sizeof ed);
+            if ((sl = strrchr(ed, '\\'))) *sl = 0;
+            pack_open(ed);
             Video *v = video_open(argv[i + 1]);
             if (!v) return 1;
             int fr = atoi(argv[i + 2]);
@@ -672,7 +677,7 @@ int main(int argc, char **argv) {
     snprintf(sd, sizeof sd, "%s\\start.dxr", full);
     snprintf(sd2, sizeof sd2, "%s\\start.dxr", P.save_dir);
     snprintf(setup, sizeof setup, "%s\\SETUP.EXE", full);
-    if (GetFileAttributesA(sd) == INVALID_FILE_ATTRIBUTES && GetFileAttributesA(sd2) == INVALID_FILE_ATTRIBUTES) {
+    if (!vfs_exists(sd) && !vfs_exists(sd2)) {
         fprintf(stderr, "[disc] start.dxr uit SETUP.EXE halen ...\n");
         if (!disc_make_start(setup, sd2)) fprintf(stderr, "[disc] start.dxr niet gevonden in %s\n", setup);
     }

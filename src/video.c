@@ -181,16 +181,13 @@ static void scan_movi(Video *v, Scan *sc, size_t o, size_t end) {
 }
 
 Video *video_open(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
-    long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (n < 64) { fclose(f); return NULL; }
+    long n;
+    uint8_t *file = vfs_load(path, &n);
+    if (!file) return NULL;
+    if (n < 64) { free(file); return NULL; }
     Video *v = calloc(1, sizeof(Video));
-    v->file = malloc(n);
-    v->size = fread(v->file, 1, n, f);
-    fclose(f);
+    v->file = file;
+    v->size = n;
     if (memcmp(v->file, "RIFF", 4) || memcmp(v->file + 8, "AVI ", 4)) { video_free(v); return NULL; }
     Scan sc = {0};
     int arate = 0, is_cvid = 0;

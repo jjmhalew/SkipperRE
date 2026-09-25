@@ -180,6 +180,10 @@ static int inflate_raw(const uint8_t *src, size_t n, size_t max, uint8_t **out, 
     return s.err ? -1 : r;
 }
 
+int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen) {
+    return inflate_raw(src, n, usize, out, outlen);
+}
+
 /* ------------------------------------------------------------------ bestanden */
 static uint8_t *read_file(const char *path, size_t *n) {
     FILE *f = fopen(path, "rb");
@@ -408,6 +412,7 @@ int disc_find_data(const char *data, const char *image, const char *appdir, char
     if (sl) *sl = 0;
     GetFullPathNameA(data, sizeof cand, cand, NULL);
     if (has_game(cand)) { snprintf(out, n, "%s", cand); return 1; }
+    if (pack_open(exedir)) { snprintf(out, n, "%s", exedir); return 1; }   /* alles in de exe */
     const char *rel[] = {"%s\\extract", "%s\\..\\extract", "%s\\data"};
     for (int i = 0; i < 3; i++) {
         char p[600];

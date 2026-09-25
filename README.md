@@ -43,6 +43,7 @@ ISO9660-lezer). Voor de Python-tools kun je nog steeds `extract/` en `game/` han
 | `src/stage.c` | compositie naar 32-bit met inks (copy, matte, bg transparent, blend, ...), tekst via GDI, vormen, filmloops |
 | `src/xobj.c` | INI, FileIO, MovUtils, DLLGlue → MMSYS.DLL (CD-audio, LoadSaveGame), KEYBOARD.DLL, USER.EXE |
 | `src/video.c` | digitale video: AVI-parser en eigen Cinepak-decoder (ABC-spel), geluidsspoor via de mixer |
+| `src/pack.c` | spelbestanden achter de exe (één exe, zie hieronder); echte bestanden gaan voor |
 | `src/sound.c` | waveOut-mixer, CD-audio rechtstreeks uit `SKIPPER_1.BIN` via de `.CUE` |
 | `src/main.c` | Win32-venster, timing, invoer (Mac-keyCodes), cursors, headless testmodus, crash-handler |
 | `src/dbgheap.c` | debug-heap (`DEFS=-DDBGHEAP`): canaries + quarantaine, meldt bestand:regel |
@@ -78,6 +79,15 @@ python tools/filmstrip.py out/run out/strip.png 6
 sh tools/regress.sh                          # regressietest: 11 minigames + brievenbus/munt/baas/opslaan
 ```
 Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
+
+### Eén exe
+```bash
+RELEASE=1 ./build.sh                         # out/skipper.exe (met het icoon van de cd als extract/ er is)
+python tools/pack.py                         # -> dist/Skipper.exe (~140 MB), draait zonder cd of extract/
+```
+`tools/pack.py` plakt de films, casts, video's en `start.dxr` (raw deflate, 195 → 140 MB) achter de exe;
+de engine ziet ze als bestanden in de map van de exe. Alleen voor eigen gebruik: de spelbestanden zijn
+auteursrechtelijk beschermd.
 
 ### Eigen spellingboeken (spellingspel, MMB10)
 Het originele `STAVEDIT.EXE` is 16-bit en draait niet op Windows 11, maar het formaat is simpel. Zet in

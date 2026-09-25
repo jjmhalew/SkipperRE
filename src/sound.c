@@ -194,16 +194,9 @@ int cd_playing(void) { return g_cd_track != 0; }
 
 /* WAV-bestand (PCM 8/16-bit, mono/stereo) voor `sound playFile`; NULL als het niet lukt */
 Sound *sound_load_wav(const char *path) {
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
-    long n = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    uint8_t *b = n > 44 ? malloc(n) : NULL;
-    if (!b || fread(b, 1, n, f) != (size_t)n || memcmp(b, "RIFF", 4) || memcmp(b + 8, "WAVE", 4)) {
-        fclose(f); free(b); return NULL;
-    }
-    fclose(f);
+    long n;
+    uint8_t *b = vfs_load(path, &n);
+    if (!b || n <= 44 || memcmp(b, "RIFF", 4) || memcmp(b + 8, "WAVE", 4)) { free(b); return NULL; }
     int fmt = 0, ch = 0, rate = 0, bits = 0;
     const uint8_t *data = NULL;
     uint32_t dlen = 0;

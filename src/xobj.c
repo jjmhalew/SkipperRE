@@ -54,7 +54,8 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
     case XK_INI:
         if (!_stricmp(m, "mnew")) return mk(XK_INI, 0, NULL);
         if (!_stricmp(m, "mGetPrivateProfileString")) {
-            path_resolve(sarg(ARG(5), b4, sizeof b4), path, sizeof path);
+            path_resolve(sarg(ARG(5), b4, sizeof b4), b3, sizeof b3);
+            vfs_real(b3, path, sizeof path);
             char out[512];
             GetPrivateProfileStringA(sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2),
                                      sarg(ARG(3), b3, sizeof b3), out, sizeof out, path);
@@ -67,7 +68,8 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
             return r;
         }
         if (!_stricmp(m, "mGetPrivateProfileInt")) {
-            path_resolve(sarg(ARG(4), b4, sizeof b4), path, sizeof path);
+            path_resolve(sarg(ARG(4), b4, sizeof b4), b3, sizeof b3);
+            vfs_real(b3, path, sizeof path);
             return d_int((int)GetPrivateProfileIntA(sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2),
                                                     d_toint(ARG(3)), path));
         }
@@ -82,6 +84,7 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
             const char *mode = sarg(ARG(1), b1, sizeof b1);
             path_resolve(sarg(ARG(2), b2, sizeof b2), path, sizeof path);
             int w = !_stricmp(mode, "write"), ap = !_stricmp(mode, "append");
+            if (!w && !ap) vfs_real(strcpy(b3, path), path, sizeof path);   /* lezen mag uit het pakket */
             FILE *fp = fopen(path, w ? "wb" : ap ? "ab" : "rb");
             if (!fp) return d_int(-43);   /* fnfErr, zoals het origineel */
             FileSt *f = calloc(1, sizeof *f);

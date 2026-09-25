@@ -104,6 +104,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       *(version info left out)*
 - [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 15 checks, ~1 minute)* (13 hotspots + walk/drag/mailbox/boss scenarios) as a script, for
       example `tools/regress.sh`.
+- [x] **Single exe** (`tools/pack.py` → `dist/Skipper.exe`, ~140 MB): game files appended to the exe
+      (`src/pack.c`), icon as a resource. Regression sweep 15/15 against the packed exe from an empty folder.
 - [ ] Optional: a "Liedjes" menu for the 15 CD-audio songs (the original `Liedjes.exe` is a separate
       launcher; `src/sound.c` can already play CD audio from the BIN).
 

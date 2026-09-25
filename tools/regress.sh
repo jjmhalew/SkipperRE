@@ -4,6 +4,7 @@
 #   tools/regress.sh [exe]      (standaard out/skipper.exe)
 # Elke regel: naam, OK/FOUT, film + frame aan het eind. Screenshots in out/regress/.
 EXE=${1:-out/skipper.exe}
+DATA=${DATA:-extract}   # DATA=- : niets opgeven (bijv. een exe met ingepakte spelbestanden)
 OUTD=out/regress
 rm -rf "$OUTD"; mkdir -p "$OUTD/appdata"
 APPDATA=$(cygpath -w "$PWD/$OUTD/appdata" 2>/dev/null || echo "$PWD/$OUTD/appdata")
@@ -13,7 +14,7 @@ FAIL=0
 # check naam verwacht-film-of-global  args...
 check() {
     name=$1; want=$2; shift 2
-    out=$(timeout 300 "$EXE" extract "$@" --shot "${SHOT:-450}" "$OUTD/$name.bmp" --dump 2>&1)
+    out=$(timeout 300 "$EXE" $DATA "$@" --shot "${SHOT:-450}" "$OUTD/$name.bmp" --dump 2>&1)
     last=$(printf '%s\n' "$out" | grep '^frame ' | tail -1)
     if printf '%s\n' "$out" | grep -q -- "$want"; then echo "OK    $name: $last"
     else echo "FOUT  $name: verwacht '$want' | $last"; FAIL=1; fi

@@ -1,11 +1,16 @@
 #!/bin/sh
-# Bouwen: standaard debug (UBSan + PDB); RELEASE=1 voor een geoptimaliseerde build zonder UBSan.
-#   ./build.sh                       out/skipper.exe (debug)
-#   RELEASE=1 ./build.sh             out/skipper.exe (release)
-#   OPT=-O0 DEFS=-DDBGHEAP ./build.sh  met debug-heap
 if [ "$RELEASE" = 1 ]; then OPT=${OPT:--O2 -fno-sanitize=undefined}; fi
 OPT=${OPT:--O1}
 OUT=${OUT:-out/skipper.exe}
+# icoon van de cd in de exe (als de spelbestanden in extract/ staan)
+ICON=${ICON:-extract/Magnus.ico}
+RC=
+if [ -f "$ICON" ]; then
+  mkdir -p out
+  cp "$ICON" out/skipper.ico
+  echo '1 ICON "skipper.ico"' > out/skipper.rc
+  RC=out/skipper.rc
+fi
 python -m ziglang cc -std=c99 $OPT -g -fno-omit-frame-pointer -Wall -Wno-unused-function -o $OUT \
-  src/main.c src/dfile.c src/lingo.c src/builtins.c src/player.c src/stage.c src/xobj.c src/sound.c src/video.c src/trans.c src/disc.c src/dbgheap.c $DEFS \
+  src/main.c src/dfile.c src/lingo.c src/builtins.c src/player.c src/stage.c src/xobj.c src/sound.c src/video.c src/trans.c src/disc.c src/pack.c src/dbgheap.c $RC $DEFS \
   -lgdi32 -luser32 -lwinmm -ldbghelp -lcomdlg32

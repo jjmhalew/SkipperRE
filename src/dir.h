@@ -368,6 +368,12 @@ int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintO
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
 int disc_make_start(const char *setup_exe, const char *dst);
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
+int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen);
+/* pack.c: spelbestanden achter de exe (tools/pack.py) */
+int pack_open(const char *root);
+int vfs_exists(const char *path);
+uint8_t *vfs_load(const char *path, long *n);
+char *vfs_real(const char *path, char *out, int n);
 void host_print(const uint32_t *px, int w, int h, int landscape, const char *name);
 int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
 int player_focus_field(void);   /* kanaal van het editable veld met toetsenbordfocus in CP, of 0 */

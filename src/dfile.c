@@ -15,17 +15,14 @@ static uint16_t rd16(DFile *f, const uint8_t *p) { return f->le ? le16(p) : be16
 static uint32_t rdtag(DFile *f, const uint8_t *p) { return f->le ? le32(p) : be32(p); }
 
 DFile *dfile_open(const char *path) {
-    FILE *fp = fopen(path, "rb");
-    if (!fp) return NULL;
-    fseek(fp, 0, SEEK_END);
-    long len = ftell(fp);
-    fseek(fp, 0, SEEK_SET);
+    long len;
+    uint8_t *data = vfs_load(path, &len);
+    if (!data) return NULL;
+    if (len < 64) { free(data); return NULL; }
     DFile *f = calloc(1, sizeof *f);
     snprintf(f->path, sizeof f->path, "%s", path);
-    f->data = malloc(len);
+    f->data = data;
     f->len = len;
-    if (fread(f->data, 1, len, fp) != (size_t)len) { fclose(fp); free(f->data); free(f); return NULL; }
-    fclose(fp);
     const uint8_t *d = f->data;
     if (!memcmp(d, "XFIR", 4)) f->le = 1;
     else if (!memcmp(d, "RIFX", 4)) f->le = 0;
@@ -527,7 +524,7 @@ static void score_parse(Score *sc, const uint8_t *b, uint32_t sz) {
 void score_parse_ext(Score *sc, const uint8_t *b, uint32_t sz) { score_parse(sc, b, sz); }
 
 /* ------------------------------------------------------------------ film */
-static int file_exists(const char *p) { FILE *f = fopen(p, "rb"); if (f) fclose(f); return f != NULL; }
+static int file_exists(const char *p) { return vfs_exists(p); }
 
 static int find_file(const char *dir, const char *name, const char **exts, char *out, int n) {
     for (int i = 0; exts[i]; i++) {

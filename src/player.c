@@ -61,8 +61,7 @@ static Movie *movie_get(const char *name) {
     for (int d = 0; d < 2 && !mv; d++)
         for (int i = 0; exts[i] && !mv && dirs[d][0]; i++) {
             snprintf(path, sizeof path, "%s/%s%s", dirs[d], key, exts[i]);
-            FILE *f = fopen(path, "rb");
-            if (f) { fclose(f); mv = movie_load(path); }
+            if (vfs_exists(path)) mv = movie_load(path);
         }
     if (!mv) { vm_error("film niet gevonden: %s", name); return NULL; }
     if (g_nmovies < 64) {
