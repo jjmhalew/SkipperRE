@@ -509,7 +509,10 @@ static void make_window(void) {
     wc.hInstance = GetModuleHandle(NULL);
     wc.lpszClassName = "SkipperRE";
     wc.hCursor = NULL;
-    wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
+    char ico[300];   /* het icoon van de cd (Magnus.ico in de datamap) */
+    snprintf(ico, sizeof ico, "%s\\Magnus.ico", P.base_dir);
+    wc.hIcon = (HICON)LoadImageA(NULL, ico, IMAGE_ICON, 0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE);
+    if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
     RegisterClassA(&wc);
     DWORD style = WS_OVERLAPPEDWINDOW;
     if (g_scale <= 0) {   /* grootste gehele schaal waarbij het venster in het werkgebied past */

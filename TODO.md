@@ -95,7 +95,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       default window size = largest scale that fits. *(not seen in a window yet: check!)*
 - [ ] Load data straight from the disc image (BIN/CUE, MDF or a real CD drive) instead of a prepared
       `extract/` folder. `tools/iso.py` has a hard-coded path.
-- [ ] Release build without UBSan (`OPT=-O2`, no `-g`), icon (`Magnus.ico`), version info.
+- [x] Release build (`RELEASE=1 ./build.sh`: -O2, no UBSan), window icon from `Magnus.ico` on the disc.
+      *(version info left out)*
 - [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 15 checks, ~1 minute)* (13 hotspots + walk/drag/mailbox/boss scenarios) as a script, for
       example `tools/regress.sh`.
 - [ ] Optional: a "Liedjes" menu for the 15 CD-audio songs (the original `Liedjes.exe` is a separate

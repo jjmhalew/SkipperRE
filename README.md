@@ -59,6 +59,7 @@ Semantiek die uit het spel bleek (en die de port nodig had):
 
 ```bash
 ./build.sh                                   # out/skipper.exe (debug-build met UBSan + PDB)
+RELEASE=1 ./build.sh                         # geoptimaliseerd, zonder UBSan (om te spelen)
 OPT=-O0 DEFS=-DDBGHEAP ./build.sh            # met debug-heap
 ./out/skipper.exe extract                    # spelen (venster zo groot als past; Alt+Enter = volledig scherm)
 ./out/skipper.exe extract --fullscreen       # meteen volledig scherm; --scale N voor een vaste venstergrootte
