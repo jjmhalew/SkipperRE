@@ -12,6 +12,7 @@
 #include <windows.h>
 #include <math.h>
 #include <dbghelp.h>
+#include <commdlg.h>
 
 extern int sound_headless;
 static HWND g_hwnd;
@@ -40,6 +41,62 @@ char *path_resolve(const char *p, char *out, int n) {
     if (GetFileAttributesA(cand) != INVALID_FILE_ATTRIBUTES) { snprintf(out, n, "%s", cand); return out; }
     snprintf(out, n, "%s\\%s", P.save_dir, b);   /* nieuw bestand: in de opslagmap */
     return out;
+}
+
+/* Afdrukken (PrintOMatic in het tekenspel): Windows-printdialoog, plaatje zo groot mogelijk binnen
+ * marges van 1 inch, liggend als het spel dat vraagt. Headless: BMP in de opslagmap. */
+void host_print(const uint32_t *px, int w, int h, int landscape, const char *name) {
+    if (g_headless) {
+        char path[600];
+        snprintf(path, sizeof path, "%s\\print.bmp", P.save_dir);
+        bmp_write(path, px, w, h);
+        fprintf(stderr, "[print] %s %dx%d %s -> %s\n", name, w, h, landscape ? "liggend" : "staand", path);
+        return;
+    }
+    PRINTDLGA pd = {0};
+    pd.lStructSize = sizeof pd;
+    pd.hwndOwner = g_hwnd;
+    pd.Flags = PD_RETURNDEFAULT;
+    if (PrintDlgA(&pd) && pd.hDevMode) {   /* standaardinstellingen ophalen om de oriëntatie te zetten */
+        DEVMODEA *dm = GlobalLock(pd.hDevMode);
+        if (dm) {
+            dm->dmFields |= DM_ORIENTATION;
+            dm->dmOrientation = landscape ? DMORIENT_LANDSCAPE : DMORIENT_PORTRAIT;
+            GlobalUnlock(pd.hDevMode);
+        }
+    }
+    pd.Flags = PD_RETURNDC | PD_NOPAGENUMS | PD_NOSELECTION | PD_USEDEVMODECOPIESANDCOLLATE;
+    if (!PrintDlgA(&pd) || !pd.hDC) {
+        if (pd.hDevMode) GlobalFree(pd.hDevMode);
+        if (pd.hDevNames) GlobalFree(pd.hDevNames);
+        return;
+    }
+    HDC dc = pd.hDC;
+    DOCINFOA di = {0};
+    di.cbSize = sizeof di;
+    di.lpszDocName = name;
+    if (StartDocA(dc, &di) > 0 && StartPage(dc) > 0) {
+        int pw = GetDeviceCaps(dc, HORZRES), ph = GetDeviceCaps(dc, VERTRES);
+        int mx = GetDeviceCaps(dc, LOGPIXELSX), my = GetDeviceCaps(dc, LOGPIXELSY);
+        int aw = pw - 2 * mx, ah = ph - 2 * my;
+        if (aw < pw / 2) { aw = pw; mx = 0; }
+        if (ah < ph / 2) { ah = ph; my = 0; }
+        double sc = (double)aw / w < (double)ah / h ? (double)aw / w : (double)ah / h;
+        int dw = (int)(w * sc), dh = (int)(h * sc);
+        BITMAPINFO bi = {0};
+        bi.bmiHeader.biSize = sizeof bi.bmiHeader;
+        bi.bmiHeader.biWidth = w;
+        bi.bmiHeader.biHeight = -h;
+        bi.bmiHeader.biPlanes = 1;
+        bi.bmiHeader.biBitCount = 32;
+        SetStretchBltMode(dc, HALFTONE);
+        StretchDIBits(dc, mx + (aw - dw) / 2, my + (ah - dh) / 2, dw, dh, 0, 0, w, h, px, &bi, DIB_RGB_COLORS, SRCCOPY);
+        EndPage(dc);
+        EndDoc(dc);
+    }
+    DeleteDC(dc);
+    if (pd.hDevMode) GlobalFree(pd.hDevMode);
+    if (pd.hDevNames) GlobalFree(pd.hDevNames);
 }
 
 /* MMSYS.LoadSaveGame(hwnd, isLoad): dialoog met 16 spelposities. De namen staan in

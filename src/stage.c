@@ -323,4 +323,12 @@ void bmp_write(const char *path, const uint32_t *px, int w, int hgt) {
     fclose(f);
 }
 
+/* bitmap-member naar 32-bit met het huidige palet (1-bit: zwart op wit), voor afdrukken */
+uint32_t *stage_bitmap_argb(Bitmap *bm) {
+    uint32_t *out = malloc(sizeof(uint32_t) * bm->w * bm->h);
+    for (int i = 0; i < bm->w * bm->h; i++)
+        out[i] = bm->bpp == 1 ? (bm->px[i] ? 0xff000000u : 0xffffffffu) : g_lut[bm->px[i]];
+    return out;
+}
+
 void stage_screenshot(const char *path) { bmp_write(path, stage_px, SW, SH); }

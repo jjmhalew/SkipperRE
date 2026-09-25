@@ -1200,7 +1200,13 @@ static Datum bi_sprite(Datum *a, int n) { return d_int(d_toint(ARG(0))); }
 static Datum bi_birth(Datum *a, int n) {
     Datum s = ARG(0);
     if (s.t == T_SCRIPT) return obj_new(s.u.sc, a + 1, n - 1);
-    if (s.t == T_XOBJ) return xobj_call(s.u.x, a, n);
+    if (s.t == T_XOBJ) {   /* new(xtra("PrintOMatic_Lite")): methode #new met de overige argumenten */
+        Datum args[8];
+        int k = n < 8 ? n : 8;
+        args[0] = d_sym(sym("new"));
+        for (int i = 1; i < k; i++) args[i] = a[i];
+        return xobj_call(s.u.x, args, k);
+    }
     if (s.t == T_SYM) return VOIDD;   /* new(#field, castLib x): niet nodig */
     vm_error("birth/new op geen script");
     return VOIDD;
@@ -1320,6 +1326,9 @@ static Datum bi_put(Datum *a, int n) {
 }
 static Datum bi_clearGlobals(Datum *a, int n) { (void)a; (void)n; globals_clear(); return VOIDD; }
 static Datum bi_noop(Datum *a, int n) { (void)a; (void)n; return VOIDD; }
+static Datum bi_print(Datum *a, int n) { xobj_print_cmd("print", a, n); return VOIDD; }
+static Datum bi_setDocumentName(Datum *a, int n) { xobj_print_cmd("setDocumentName", a, n); return VOIDD; }
+static Datum bi_setLandscapeMode(Datum *a, int n) { xobj_print_cmd("setLandscapeMode", a, n); return VOIDD; }
 
 static Datum bi_openXLib(Datum *a, int n) {
     char buf[300], name[64];
@@ -1458,10 +1467,10 @@ void builtins_register(void) {
     vm_register("continue", bi_continue);
     vm_register("do", bi_do);
     vm_register("erase", bi_noop);
-    vm_register("print", bi_noop);
-    vm_register("setDocumentName", bi_noop);
+    vm_register("print", bi_print);
+    vm_register("setDocumentName", bi_setDocumentName);
     vm_register("setMargins", bi_noop);
-    vm_register("setLandscapeMode", bi_noop);
+    vm_register("setLandscapeMode", bi_setLandscapeMode);
     vm_register("param", bi_param);
     vm_register("delay", bi_delay);
     vm_register("beep", bi_noop);

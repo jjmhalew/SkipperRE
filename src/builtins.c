@@ -126,7 +126,10 @@ static Datum bi_deleteOne(Datum *a, int n) {
     return VOIDD;
 }
 
-static Datum bi_append(Datum *a, int n) { return bi_add(a, n); }
+static Datum bi_append(Datum *a, int n) {
+    if (xobj_print_cmd("append", a, n)) return VOIDD;   /* PrintOMatic: append(doc, member) */
+    return bi_add(a, n);
+}
 
 static Datum bi_getaProp(Datum *a, int n) {
     Datum l = ARG(0);

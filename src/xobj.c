@@ -164,4 +164,32 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
     return VOIDD;
 }
 
+/* PrintOMatic_Lite (tekenspel MMB11): één member afdrukken. append/print/setLandscapeMode/
+ * setDocumentName worden als gewone functies met het document als eerste argument aangeroepen. */
+typedef struct PrintJob { int member; } PrintJob;   /* lib << 16 | nummer */
+
+int xobj_print_cmd(const char *cmd, Datum *a, int n) {
+    if (n < 1 || a[0].t != T_XOBJ || a[0].u.x->kind != XK_PRINT) return 0;
+    XObj *x = a[0].u.x;
+    if (!_stricmp(cmd, "setDocumentName")) {
+        char buf[200];
+        free(x->sval);
+        x->sval = _strdup(n > 1 ? d_tostr(a[1], buf, sizeof buf) : "");
+    } else if (!_stricmp(cmd, "setLandscapeMode")) x->ival = n > 1 && d_truthy(a[1]);
+    else if (!_stricmp(cmd, "append")) {
+        if (!x->st) x->st = calloc(1, sizeof(PrintJob));
+        if (n > 1 && a[1].t == T_MEMBER) ((PrintJob *)x->st)->member = a[1].u.i;
+    } else if (!_stricmp(cmd, "print")) {
+        PrintJob *j = x->st;
+        CastLib *cl;
+        Member *m = j && P.mv ? movie_member(P.mv, j->member >> 16, j->member & 0xffff, &cl) : NULL;
+        Bitmap *bm = m && m->type == MT_BITMAP ? member_bitmap(cl, m) : NULL;
+        if (!bm) { vm_error("print: geen bitmap om af te drukken"); return 1; }
+        uint32_t *px = stage_bitmap_argb(bm);
+        host_print(px, bm->w, bm->h, x->ival, x->sval ? x->sval : "Skipper & Skeeto");
+        free(px);
+    }
+    return 1;
+}
+
 void xobj_register(void) {}
