@@ -48,7 +48,8 @@ fidelity/polish, **P3** = nice to have.
       `STAVEDIT.EXE`, a **16-bit** Windows program that does not run on 64-bit Windows 11. Options:
       document the file format and write a small editor, or leave the feature out. Decide after the
       format is known.
-- [x] **Printing in the paint game (MMB11).** *(done: prints the colouring page (`maleN`, not the user's
+- [x] **Printing in the paint game (MMB11).** *(MMB11 is a colouring book: browse line drawings and print them,
+      there is no painting on screen; with printing it is complete)* *(done: prints the colouring page (`maleN`, not the user's
       painting) through the Windows print dialog, fitted within 1-inch margins, landscape if the game asks; headless
       writes `print.bmp`)* `PrintOMatic_Lite` is a no-op, so the print button does
       nothing. Proposal: save the drawing as PNG/BMP (plus the Windows print dialog if wanted).
