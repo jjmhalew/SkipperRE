@@ -1227,8 +1227,21 @@ static Datum bi_sound(Datum *a, int n) {
     const char *c = symname(cmd.u.i);
     if (!_stricmp(c, "stop") || !_stricmp(c, "fadeOut")) sound_stop(d_toint(ARG(1)));
     else if (!_stricmp(c, "playFile")) {
-        char msg[300];
-        vm_error("sound playFile niet ondersteund: %s", d_tostr(ARG(2), msg, sizeof msg));
+        /* spellingspel: eigen woorden, gMMPath & "WAV" & naam. Het laatst geladen bestand per kanaal
+           blijft bewaard tot het volgende (de mixer speelt het nog af). */
+        static Sound *loaded[9];
+        int ch = d_toint(ARG(1));
+        char path[300], alt[300];
+        d_tostr(ARG(2), path, sizeof path);
+        Sound *s = sound_load_wav(path);
+        if (!s) s = sound_load_wav(path_resolve(path, alt, sizeof alt));
+        if (!s) { vm_error("sound playFile: %s niet te laden", path); return VOIDD; }
+        if (ch >= 1 && ch <= 8) {
+            sound_stop(ch);
+            if (loaded[ch]) { free(loaded[ch]->pcm); free(loaded[ch]); }
+            loaded[ch] = s;
+            sound_play_sound(ch, s);
+        } else { free(s->pcm); free(s); }
     }
     return VOIDD;
 }

@@ -137,8 +137,11 @@ void sound_init(void) {
 }
 
 void sound_play_member(int ch, CastLib *c, Member *m) {
+    sound_play_sound(ch, member_sound(c, m));
+}
+
+void sound_play_sound(int ch, Sound *s) {
     if (ch < 1 || ch > NCH) return;
-    Sound *s = member_sound(c, m);
     if (!s || !s->rate) return;
     EnterCriticalSection(&g_cs);
     g_v[ch].s = s;
@@ -188,6 +191,43 @@ void cd_stop(void) {
 }
 
 int cd_playing(void) { return g_cd_track != 0; }
+
+/* WAV-bestand (PCM 8/16-bit, mono/stereo) voor `sound playFile`; NULL als het niet lukt */
+Sound *sound_load_wav(const char *path) {
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long n = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    uint8_t *b = n > 44 ? malloc(n) : NULL;
+    if (!b || fread(b, 1, n, f) != (size_t)n || memcmp(b, "RIFF", 4) || memcmp(b + 8, "WAVE", 4)) {
+        fclose(f); free(b); return NULL;
+    }
+    fclose(f);
+    int fmt = 0, ch = 0, rate = 0, bits = 0;
+    const uint8_t *data = NULL;
+    uint32_t dlen = 0;
+    for (long o = 12; o + 8 <= n;) {
+        uint32_t sz = b[o + 4] | b[o + 5] << 8 | b[o + 6] << 16 | (uint32_t)b[o + 7] << 24;
+        if (o + 8 + (long)sz > n) sz = (uint32_t)(n - o - 8);
+        if (!memcmp(b + o, "fmt ", 4) && sz >= 16) {
+            fmt = b[o + 8] | b[o + 9] << 8;
+            ch = b[o + 10] | b[o + 11] << 8;
+            rate = b[o + 12] | b[o + 13] << 8 | b[o + 14] << 16 | b[o + 15] << 24;
+            bits = b[o + 22] | b[o + 23] << 8;
+        } else if (!memcmp(b + o, "data", 4)) { data = b + o + 8; dlen = sz; }
+        o += 8 + sz + (sz & 1);
+    }
+    if (fmt != 1 || (ch != 1 && ch != 2) || (bits != 8 && bits != 16) || !data || rate <= 0) { free(b); return NULL; }
+    Sound *s = calloc(1, sizeof(Sound));
+    size_t samples = bits == 8 ? dlen : dlen / 2;
+    s->pcm = malloc(samples * sizeof(int16_t) + 2);
+    for (size_t i = 0; i < samples; i++)
+        s->pcm[i] = bits == 8 ? (int16_t)((data[i] - 128) * 256) : (int16_t)(data[2 * i] | data[2 * i + 1] << 8);
+    s->rate = rate; s->bits = 16; s->channels = ch; s->frames = (int)(samples / ch);
+    free(b);
+    return s;
+}
 
 /* geluidsspoor van een video vanaf offset (seconden) */
 void sound_video_play(Sound *s, double offset) {

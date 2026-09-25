@@ -380,6 +380,8 @@ void stage_screenshot(const char *path);
 /* sound */
 void sound_init(void);
 void sound_play_member(int ch, CastLib *c, Member *m);
+void sound_play_sound(int ch, Sound *s);
+Sound *sound_load_wav(const char *path);
 void sound_stop(int ch);
 int sound_busy(int ch);
 void sound_set_level(int lvl);

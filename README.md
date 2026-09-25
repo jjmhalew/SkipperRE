@@ -70,6 +70,17 @@ sh tools/regress.sh                          # regressietest: 11 minigames + bri
 ```
 Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
 
+### Eigen spellingboeken (spellingspel, MMB10)
+Het originele `STAVEDIT.EXE` is 16-bit en draait niet op Windows 11, maar het formaat is simpel. Zet in
+`%APPDATA%\SkipperRE` een tekstbestand `GBBOOK1.MMB` (t/m `GBBOOK4.MMB`, de drie kleine boekjes op de plank):
+```
+E
+kat,kat.wav
+hond,hond.wav
+```
+Regel 1: `H` = moeilijk, iets anders = makkelijk. Daarna per regel `woord,geluid.wav` (max. 200 woorden, 20
+letters). De WAV's (PCM 8/16-bit) staan in `%APPDATA%\SkipperRE\WAV\`.
+
 ## Gebruik
 ```bash
 pip install pillow

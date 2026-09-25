@@ -41,9 +41,10 @@ fidelity/polish, **P3** = nice to have.
   - [x] AVI (RIFF) parser plus our own **Cinepak decoder**, to stay independent of Windows codecs
   - [x] sprite rendering of the current frame; `movieRate`/`movieTime`/`duration`; the audio track
         through the mixer
-- [ ] **`sound playFile` (external WAV).** Used by the spelling game (MMB10) for custom word lists:
+- [x] **`sound playFile` (external WAV).** *(done: WAV loader in `src/sound.c`)* Used by the spelling game (MMB10) for custom word lists:
       `gMMPath & "WAV\" & name`. Short WAV reader into the mixer.
-- [ ] **Custom spelling books.** MMB10 reads word lists through FileIO. They are made with
+- [x] **Custom spelling books.** *(format documented in the README: `GBBOOKn.MMB` + `WAV\`; verified with a
+      home-made book. No editor, a text editor is enough.)* MMB10 reads word lists through FileIO. They are made with
       `STAVEDIT.EXE`, a **16-bit** Windows program that does not run on 64-bit Windows 11. Options:
       document the file format and write a small editor, or leave the feature out. Decide after the
       format is known.
