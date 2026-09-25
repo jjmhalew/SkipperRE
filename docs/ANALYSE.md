@@ -2,7 +2,9 @@
 
 ## Disc
 `SKIPPER_1.BIN/.CUE` (archive.org `skipper-1`): Enhanced CD.
-- Sessie 1: tracks 1-15 audio (spelmuziek, via `CDPlayTrack`), lead-out 19:33:31.
+- Sessie 1: tracks 1-15 audio, lead-out 19:33:31. Dit zijn de liedjes voor de losse speler `Liedjes.exe`;
+  het spel zelf gebruikt ze niet (`PlayCDTrack` in Magnus.dxr wordt nergens aangeroepen, de muziek zijn
+  de `BkgSnd*`-geluiden op kanaal 2).
 - Sessie 2: track 16 MODE2/2352 op 22:05:31 = bestandssector 99406 = absolute LBA (de 11400 sectoren
   sessiegat staan als nullen in de BIN). Userdata op offset 24 van elke sector (Form 1). PVD op 99422.
 
@@ -37,8 +39,9 @@ Movie-properties: `the stage`, `the actorList` (objecten met stepFrame), `the fr
 
 ### Native aanroepen
 Via het XObject `DLLGlue(mNew, the pathName & "MMSYS.DLL", <functie>, <ret>, <args>)`:
-`CDPlayTrack(I)`, `CDPlaying()`, `CDStop()`, `LoadSaveGame(W,I)`. `MMSYS.DLL` staat niet op de CD
-(komt uit de installer). Verder `MAGNUS.INI` (instellingen), `KEYBOARD.DLL`, `MOVUTILS`, PrintOMatic (printen).
+`CDPlayTrack(I)`, `CDPlaying()`, `CDStop()`, `LoadSaveGame(W,I)` (alle vier gedefinieerd maar niet gebruikt:
+opslaan/laden gaat via de eigen dialoogfilm `mmdlg3` en `MMSAVn.MMS`), plus `KEYBOARD.VkKeyScan` en
+`USER.InvalidateRect/UpdateWindow`. `MMSYS.DLL` staat niet op de CD (komt uit de installer). Verder `MAGNUS.INI` (instellingen), `KEYBOARD.DLL`, `MOVUTILS`, PrintOMatic (printen).
 
 ## Bitmap-castlid (spec, big-endian)
 `u16 pitch|0x8000`, `rect top,left,bottom,right`, 8 bytes (onbekend), `i16 regY, regX` (absoluut, zelfde
