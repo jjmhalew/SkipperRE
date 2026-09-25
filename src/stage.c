@@ -206,7 +206,8 @@ static void draw_filmloop(uint32_t *dst, int ox, int oy, int cw, int chh, CastLi
         SprRec *r = &fr->spr[i];
         Channel *k = &tmp.ch[i + 1];
         if (!r->member) continue;
-        k->lib = r->lib ? r->lib : cl->lib; k->member = r->member; k->ink = r->ink;
+        k->lib = (r->lib && r->lib != 0xffff) ? r->lib : cl->lib;   /* -1 = de cast van de loop zelf */
+        k->member = r->member; k->ink = r->ink;
         k->fore = r->fore; k->back = r->back;
         k->loch = r->loch - m->rect_l + l; k->locv = r->locv - m->rect_t + t;
         k->w = r->w; k->h = r->h; k->stretch = r->stretch; k->visible = 1; k->blend = r->blend;
