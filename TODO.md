@@ -64,7 +64,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       (`mmdlg2` → `mmdlg3 LeaveGame`). Check that `MMSAVn.MMS` / `MAGNUS.INI` in `%APPDATA%\SkipperRE`
       are written and restored correctly (all object flags through `GetFlags`/`LoadFlags`).
 - [ ] **Options** (`mmdlg1`, F7), **map** (`mmdlg4`, map icon in the pocket), **reward** (`mmdlg5` at
-      ≥ 50 points), **tutorial** (`mmtutor`, F1).
+      ≥ 50 points), **tutorial** (`mmtutor`, F1). *(options, map and tutorial open and render; the actorList bug
+      that overwrote dialog sprites is fixed; reward screen and clicking through still to do)*
 - [ ] **All 12 minigames** actually playable: rounds, scoring, back to the room. Only the first screen +
       clicks are tested now.
 - [ ] **Whole adventure**: 47 locations, all puzzles (`JobIsDone` requires 18 conditions: mirror,

@@ -388,7 +388,9 @@ static void enter_frame(int first) {
             }
         }
     }
-    actor_step();
+    /* de actorList (P.actor_list) hoort bij de film op het podium: niet stappen in een dialoogvenster,
+       anders schrijft Skeeto's stepFrame in sprite 21 van mmdlg1 */
+    if (CP == &P) actor_step();
     frame_event(sym("enterFrame"));
     CP->update_needed = 1;
 }
