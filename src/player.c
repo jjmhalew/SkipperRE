@@ -297,8 +297,15 @@ static void enter_frame(int first) {
     Movie *mv = CP->mv;
     Frame *fr = cur_frame();
     if (!fr) return;
-    for (int i = 1; i <= NCHAN; i++)
+    for (int i = 1; i <= NCHAN; i++) {
         if (!CP->ch[i].puppet) chan_from_score(i, &fr->spr[i - 1]);
+        else {
+            /* het sprite-script komt ook bij puppets uit de score (D5 kan het niet puppeten);
+               Magnus frame 3 heeft het script per ongeluk op kanaal 10 i.p.v. 11 (de brievenbus) */
+            CP->ch[i].slib = fr->spr[i - 1].slib;
+            CP->ch[i].script = fr->spr[i - 1].smember;
+        }
+    }
     if (fr->tempo && fr->tempo <= 120) CP->tempo = fr->tempo;
     if (CP == &P) {
         /* paletkanaal */
@@ -437,10 +444,28 @@ static Window *modal_window(void) {
     return NULL;
 }
 
+/* moveableSprite: Director sleept de sprite zelf zolang de knop ingedrukt is */
+static Player *g_drag_ctx;
+static int g_drag_ch, g_drag_dx, g_drag_dy;
+
+int player_drag_update(void) {
+    if (!g_drag_ch) return 0;
+    Channel *c = &g_drag_ctx->ch[g_drag_ch];
+    int nh = P.mouse_x + g_drag_dx, nv = P.mouse_y + g_drag_dy;
+    if (c->loch == nh && c->locv == nv) return 0;
+    c->loch = nh; c->locv = nv;
+    return 1;
+}
+
 void player_mouse(int x, int y, int down, int up, int right) {
     P.mouse_x = x; P.mouse_y = y;
     if (!down && !up) {
+        player_drag_update();
         return;
+    }
+    if (up && !right && g_drag_ch) {
+        player_drag_update();
+        g_drag_ch = 0;
     }
     Window *w = top_window_at(x, y);
     Window *mw = modal_window();
@@ -459,9 +484,15 @@ void player_mouse(int x, int y, int down, int up, int right) {
         int ch = sprite_under(lx, ly, 1);
         P.click_on = ch;
         P.last_click = (int)now_ms();
+        int top = sprite_under(lx, ly, 0);
+        if (!right && top && CP->ch[top].moveable) {
+            g_drag_ctx = CP;
+            g_drag_ch = top;
+            g_drag_dx = CP->ch[top].loch - x;   /* loc is lokaal, muis globaal */
+            g_drag_dy = CP->ch[top].locv - y;
+        }
         if (!right && run_primary(CP->mouse_down_script)) { CP = save; return; }
         if (ch) sprite_event(ch, ev); else frame_event(ev);
-        /* moveableSprite: slepen gebeurt in main.c via the stillDown/mouseH (de scripts doen het zelf) */
     } else {
         ev = sym(right ? "rightMouseUp" : "mouseUp");
         int ch = sprite_under(lx, ly, 1);

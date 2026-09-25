@@ -3,6 +3,7 @@
  *   skipper.exe [datamap] [--movie start] [--bin SKIPPER_1.BIN] [--scale 2] [--trace]
  *               [--shot N out.bmp]   (headless: N frames draaien, stage opslaan, stoppen)
  *               [--click x y F]      (headless: klik op (x,y) vlak voor frame F)
+ *               [--drag x1 y1 x2 y2 F] (headless: slepen van (x1,y1) naar (x2,y2) vlak voor frame F)
  */
 #include "dir.h"
 #include <stdlib.h>
@@ -356,7 +357,7 @@ static void pump(void) {
 void host_pump(void) {
     if (g_headless) return;
     pump();
-    if (P.update_needed) stage_present();   /* scripts die in een lus wachten, zien toch hun updateStage */
+    if (player_drag_update() || P.update_needed) stage_present();   /* scripts die in een lus wachten, zien toch hun updateStage */
 }
 
 static void make_window(void) {
@@ -412,6 +413,7 @@ int main(int argc, char **argv) {
     const char *data = "extract", *movie = "start", *shot = NULL;
     int shot_frames = 0;
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
+    int drags[16][5], ndrags = 0;
     char bin[300] = "";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
@@ -421,6 +423,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--shot") && i + 2 < argc) { shot_frames = atoi(argv[++i]); shot = argv[++i]; g_headless = 1; }
         else if (!strcmp(argv[i], "--click") && i + 3 < argc && nclicks < 64) {
             clicks[nclicks][0] = atoi(argv[++i]); clicks[nclicks][1] = atoi(argv[++i]); clicks[nclicks++][2] = atoi(argv[++i]);
+        }
+        else if (!strcmp(argv[i], "--drag") && i + 5 < argc && ndrags < 16) {
+            for (int k = 0; k < 5; k++) drags[ndrags][k] = atoi(argv[++i]);
+            ndrags++;
         }
         else if (!strcmp(argv[i], "--every") && i + 1 < argc) every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--dump")) dump = 1;
@@ -441,7 +447,7 @@ int main(int argc, char **argv) {
     uint32_t next = now_ms();
     int frames = 0;
     while (P.halted != 2) {
-        if (!g_headless) { pump(); drain_input(); }
+        if (!g_headless) { pump(); drain_input(); if (player_drag_update()) stage_present(); }
         uint32_t t = now_ms();
         if (g_headless || (int32_t)(t - next) >= 0) {
             for (int k = 0; k < nclicks; k++)
@@ -450,6 +456,15 @@ int main(int argc, char **argv) {
                     P.mouse_down = 0;   /* headless: de knop geldt meteen als losgelaten */
                     player_mouse(clicks[k][0], clicks[k][1], 1, 0, 0);
                     player_mouse(clicks[k][0], clicks[k][1], 0, 1, 0);
+                }
+            for (int k = 0; k < ndrags; k++)
+                if (frames == drags[k][4]) {   /* headless: neer op (x1,y1), slepen naar (x2,y2), los */
+                    P.mouse_x = drags[k][0]; P.mouse_y = drags[k][1];
+                    P.mouse_down = 1;
+                    player_mouse(drags[k][0], drags[k][1], 1, 0, 0);
+                    player_mouse(drags[k][2], drags[k][3], 0, 0, 0);
+                    P.mouse_down = 0;
+                    player_mouse(drags[k][2], drags[k][3], 0, 1, 0);
                 }
             DBG_CHECK();
             int ms = player_tick();
@@ -483,9 +498,9 @@ int main(int argc, char **argv) {
             Member *m = movie_member(P.mv, c->lib, c->member, &cl);
             int l, t, r, b;
             sprite_rect(ch, &l, &t, &r, &b);
-            fprintf(stderr, "[ch %2d] %d:%d %-14s type %d ink %d fg %d bg %d rect %d,%d-%d,%d stretch %d puppet %d\n", ch,
+            fprintf(stderr, "[ch %2d] %d:%d %-14s type %d ink %d fg %d bg %d rect %d,%d-%d,%d stretch %d puppet %d script %d:%d\n", ch,
                     c->lib, c->member, m ? m->name : "?", m ? m->type : -1, c->ink, c->fore, c->back, l, t, r, b,
-                    c->stretch, c->puppet);
+                    c->stretch, c->puppet, c->slib, c->script);
         }
     }
     if (shot) {

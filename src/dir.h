@@ -250,6 +250,7 @@ Datum obj_new(Script *s, Datum *args, int n);   /* birth/new */
 void vm_register(const char *name, Builtin fn);
 Builtin vm_builtin(int name);
 Datum *global_ref(int name);
+Datum *global_find(int name);   /* NULL als de global (nog) niet bestaat */
 void vm_error(const char *fmt, ...);
 extern int vm_trace;
 extern int vm_pass;         /* pass aangeroepen */
@@ -341,6 +342,7 @@ void player_init(const char *base_dir);
 void player_start(const char *movie);
 int player_tick(void);          /* 1 frame; geeft ms tot volgende frame */
 void player_mouse(int x, int y, int down_event, int up_event, int right);
+int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
 void player_key(int code, int ch, int down);
 void player_update_stage(void);
 Datum player_the(int name);

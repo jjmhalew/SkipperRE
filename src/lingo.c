@@ -344,6 +344,12 @@ typedef struct GEnt { int name; Datum v; } GEnt;
 static GEnt *g_glob;
 static int g_nglob, g_capglob;
 
+Datum *global_find(int name) {
+    for (int i = 0; i < g_nglob; i++)
+        if (g_glob[i].name == name) return &g_glob[i].v;
+    return NULL;
+}
+
 Datum *global_ref(int name) {
     for (int i = 0; i < g_nglob; i++)
         if (g_glob[i].name == name) return &g_glob[i].v;
@@ -919,16 +925,19 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
                 }
             } else if (id.t == T_VARREF) {
                 /* D4-syntax f(var, ...) waarbij de compiler niet wist of f een XObject was: het eerste
-                 * argument is dan de NAAM van een variabele (local, arg of property); niet gedeclareerd
-                 * = VOID, net als in het origineel */
+                 * argument is dan de NAAM van een variabele: local, arg, property en anders een bestaande
+                 * global, ook als die in de handler niet gedeclareerd is. Het spel leunt daarop:
+                 * add(gAnimNotify, ...) in StopAnimation (AnimEnd-events), symbolp(gEffectNotify) in DoExit */
                 if (a.u.l->n > 0 && a.u.l->v[0].t == T_SYM) {
                     int vn = a.u.l->v[0].u.i;
                     Datum val = VOIDD;
-                    for (int i = 0; i < h->nlocals; i++) if (h->locals[i] == vn) val = fr.locals[i];
-                    for (int i = 0; i < h->nargs && i < fr.nargs; i++) if (h->args[i] == vn) val = fr.args[i];
-                    if (val.t == T_VOID && fr.nargs > 0 && fr.args[0].t == T_OBJ) {
-                        int f;
-                        val = obj_getprop(fr.args[0].u.o, vn, &f);
+                    int got = 0;
+                    for (int i = 0; i < h->nlocals; i++) if (h->locals[i] == vn) { val = fr.locals[i]; got = 1; }
+                    for (int i = 0; i < h->nargs && i < fr.nargs; i++) if (h->args[i] == vn) { val = fr.args[i]; got = 1; }
+                    if (!got && fr.nargs > 0 && fr.args[0].t == T_OBJ) val = obj_getprop(fr.args[0].u.o, vn, &got);
+                    if (!got) {
+                        Datum *g = global_find(vn);
+                        if (g) val = *g;
                     }
                     d_unref(a.u.l->v[0]);
                     a.u.l->v[0] = d_ref(val);

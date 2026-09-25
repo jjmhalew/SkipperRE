@@ -45,14 +45,21 @@ Semantiek die uit het spel bleek (en die de port nodig had):
 - `objcallv4` op een naam: het eerste argument (symbool) is de naam van een variabele (local/arg/property).
 - Hotspots zijn vormen met ink 36 en fore = back: onzichtbaar maar klikbaar.
 - Filmloop-sprites met castLib -1 verwijzen naar de cast van de loop zelf.
+- `objcallv4` op een naam valt terug op een bestaande global, ook als die in de handler niet
+  gedeclareerd is: `add(gAnimNotify, ...)` (alle AnimEnd-events) en `symbolp(gEffectNotify)` (uitgangen
+  dicht tijdens een geluidseffect) werken alleen zo.
+- Het sprite-script komt ook bij puppet-sprites uit het huidige frame (Magnus frame 3 zet het per
+  ongeluk op kanaal 10; in frame 4 staat het op 11, de brievenbus).
+- `moveableSprite`: Director sleept de sprite zelf; bij loslaten ziet `mouseUp` de nieuwe positie.
 
 ```bash
 ./build.sh                                   # out/skipper.exe (debug-build met UBSan + PDB)
 OPT=-O0 DEFS=-DDBGHEAP ./build.sh            # met debug-heap
 ./out/skipper.exe extract                    # spelen (venster 2x, geluid; de .BIN is niet nodig)
 ./out/skipper.exe extract --bin D:/pad/SKIPPER_1.BIN --scale 1
-# headless testen: N frames draaien, klikken, periodiek screenshots, globals/kanalen dumpen
+# headless testen: N frames draaien, klikken/slepen, periodiek screenshots, globals/kanalen dumpen
 ./out/skipper.exe extract --click 320 240 170 --click 400 100 300 --shot 700 out/run --every 50 --dump
+./out/skipper.exe extract --click 320 240 170 --click 320 393 300 --drag 100 350 150 450 420 --shot 520 out/coin --dump
 python tools/filmstrip.py out/run out/strip.png 6
 ```
 Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
