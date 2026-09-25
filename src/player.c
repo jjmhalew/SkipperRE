@@ -447,6 +447,9 @@ static Window *modal_window(void) {
 /* moveableSprite: Director sleept de sprite zelf zolang de knop ingedrukt is */
 static Player *g_drag_ctx;
 static int g_drag_ch, g_drag_dx, g_drag_dy;
+static Player *g_focus_ctx;   /* editable veld met toetsenbordfocus, zie player_key */
+static int g_focus_ch;
+static int field_editable(Player *ctx, int ch);
 
 int player_drag_update(void) {
     if (!g_drag_ch) return 0;
@@ -485,6 +488,7 @@ void player_mouse(int x, int y, int down, int up, int right) {
         P.click_on = ch;
         P.last_click = (int)now_ms();
         int top = sprite_under(lx, ly, 0);
+        if (!right && top && field_editable(CP, top)) { g_focus_ctx = CP; g_focus_ch = top; }
         if (!right && top && CP->ch[top].moveable) {
             g_drag_ctx = CP;
             g_drag_ch = top;
@@ -503,6 +507,48 @@ void player_mouse(int x, int y, int down, int up, int right) {
     CP = save;
 }
 
+/* Editable velden (D5: textFlags bit 0 in de field-spec, byte 25). Toetsen die geen handler afvangt
+ * (of die `pass` doet) komen in het veld met focus: het laatst aangeklikte, anders het eerste op het
+ * podium. De cursor staat altijd aan het eind (de spellen hebben alleen korte naamvelden). */
+
+static int field_editable(Player *ctx, int ch) {
+    Channel *c = &ctx->ch[ch];
+    if (!c->member || !c->visible) return 0;
+    CastLib *cl;
+    Member *m = movie_member(ctx->mv, c->lib ? c->lib : 1, c->member, &cl);
+    return m && m->type == MT_TEXT && m->speclen > 25 && (m->spec[25] & 1);
+}
+
+int player_focus_field(void) {
+    if (g_focus_ctx == CP && g_focus_ch && field_editable(CP, g_focus_ch)) return g_focus_ch;
+    for (int ch = 1; ch <= NCHAN; ch++)
+        if (field_editable(CP, ch)) return ch;
+    return 0;
+}
+
+static void field_type(int fch, int code, int c) {
+    Channel *chn = &CP->ch[fch];
+    CastLib *cl;
+    Member *m = movie_member(CP->mv, chn->lib ? chn->lib : 1, chn->member, &cl);
+    Text *t = m ? member_text(cl, m) : NULL;
+    if (!t) return;
+    size_t n = t->text ? strlen(t->text) : 0;
+    if (code == 51 || c == 8) {                       /* backspace */
+        if (n) t->text[n - 1] = 0;
+    } else if (code == 117) {                         /* delete: niets rechts van de cursor */
+        return;
+    } else if (c == 13 || (unsigned char)c >= 32) {
+        if (n >= 255) return;
+        char *nt = malloc(n + 2);
+        if (n) memcpy(nt, t->text, n);
+        nt[n] = (char)c; nt[n + 1] = 0;
+        free(t->text);
+        t->text = nt;
+    } else return;
+    t->dirty = 1;
+    P.update_needed = 1;
+}
+
 void player_key(int code, int ch, int down) {
     P.key_code = code;
     P.key[0] = (char)ch;
@@ -510,10 +556,23 @@ void player_key(int code, int ch, int down) {
     Window *mw = modal_window();
     Player *save = CP;
     CP = mw ? mw->ctx : &P;
+    if (vm_trace) {
+        char b1[64], b2[64];
+        fprintf(stderr, "[toets %d '%c' %s] %s keyDownScript \"%s\" keyUpScript \"%s\"\n", code, ch > 31 ? ch : '?',
+                down ? "neer" : "op", mw ? mw->name : "stage", d_tostr(CP->key_down_script, b1, sizeof b1),
+                d_tostr(CP->key_up_script, b2, sizeof b2));
+    }
     if (down) {
-        if (!run_primary(CP->key_down_script)) frame_event(sym("keyDown"));
+        if (!run_primary(CP->key_down_script)) {
+            int fch = player_focus_field();
+            int handled = fch ? sprite_event(fch, sym("keyDown")) : frame_event(sym("keyDown"));
+            if (!handled && fch) field_type(fch, code, ch);
+        }
     } else {
-        if (!run_primary(CP->key_up_script)) frame_event(sym("keyUp"));
+        if (!run_primary(CP->key_up_script)) {
+            int fch = player_focus_field();   /* keyUp gaat ook eerst naar het veld (mmdlg3: sprite-script) */
+            if (fch) sprite_event(fch, sym("keyUp")); else frame_event(sym("keyUp"));
+        }
     }
     vm_abort = 0;
     CP = save;
@@ -625,7 +684,7 @@ Datum player_get(int type, int id, Datum *tg, int nt) {
         }
         if (id == 4) return d_int(CP->mv ? CP->mv->nlibs : 0);
         return d_int(0);
-    case 9: case 10: {
+    case 9: case 10: case 11: {
         Datum mem = mkmember(tg[0], tg[1]);
         int nm = id >= 1 && id <= 19 ? S(MEMBER_PROPS[id]) : S("?");
         Datum r = member_get(mem, nm);
@@ -653,7 +712,7 @@ void player_set(int type, int id, Datum *tg, int nt, Datum v) {
         else if (id == 8) P.exit_lock = d_toint(v);
         else if (id == 27) P.stage_color = d_toint(v);
         break;
-    case 9: case 10: {
+    case 9: case 10: case 11: {
         Datum mem = mkmember(tg[0], tg[1]);
         int nm = id >= 1 && id <= 19 ? S(MEMBER_PROPS[id]) : S("?");
         member_set(mem, nm, v);

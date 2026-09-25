@@ -20,7 +20,7 @@ fidelity/polish, **P3** = nice to have.
 
 ## P0 — bugs
 
-- [ ] **F5/F6/F7 hotkeys do nothing.** `GlobalKeyDown` uses Mac keyCodes 96 (F5 = load), 97 (F6 = save)
+- [x] **F5/F6/F7 hotkeys do nothing.** *(fixed)* `GlobalKeyDown` uses Mac keyCodes 96 (F5 = load), 97 (F6 = save)
       and 98 (F7 = options, `mmdlg1`), but `mac_keycode()` in `src/main.c` only maps F1–F4. Add
       F5=96, F6=97, F7=98, F8=100, F9=101, F10=109, F11=103, F12=111.
 - [ ] **Primary event handler outlives its movie.** In the minigames without their own
@@ -54,7 +54,8 @@ fidelity/polish, **P3** = nice to have.
 Headless it only goes as far as "opens and responds to clicks". Each item needs a real playthrough
 (user in a window) or a scripted headless run:
 
-- [ ] **Save/load**: F6 → `mmdlg3` (type a name, 16 slots), F5 → load, and "save before quitting"
+- [x] **Save/load** *(verified headless: typing a name, saving at D5 with the coin, loading in a fresh
+      session → D5, 3 points, coin in the pocket; the load dialog appears at startup when saves exist)*: F6 → `mmdlg3` (type a name, 16 slots), F5 → load, and "save before quitting"
       (`mmdlg2` → `mmdlg3 LeaveGame`). Check that `MMSAVn.MMS` / `MAGNUS.INI` in `%APPDATA%\SkipperRE`
       are written and restored correctly (all object flags through `GetFlags`/`LoadFlags`).
 - [ ] **Options** (`mmdlg1`, F7), **map** (`mmdlg4`, map icon in the pocket), **reward** (`mmdlg5` at

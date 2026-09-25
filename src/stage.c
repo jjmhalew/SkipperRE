@@ -101,7 +101,7 @@ static void draw_bitmap(uint32_t *dst, int ox, int oy, int cw, int ch_, Bitmap *
 }
 
 /* ------------------------------------------------------------------ tekst (GDI) */
-typedef struct TextCache { Text *t; uint32_t *img; int w, h; } TextCache;
+typedef struct TextCache { Text *t; uint32_t *img; int w, h, caret; } TextCache;
 static TextCache g_text[512];
 static int g_ntext;
 
@@ -110,7 +110,7 @@ static uint32_t color_of(int c) {
     return g_lut[c & 255];
 }
 
-static TextCache *text_render(Text *t) {
+static TextCache *text_render(Text *t, int caret) {
     TextCache *tc = NULL;
     for (int i = 0; i < g_ntext; i++) if (g_text[i].t == t) tc = &g_text[i];
     if (!tc) {
@@ -120,7 +120,8 @@ static TextCache *text_render(Text *t) {
         t->dirty = 1;
     }
     int w = t->w > 0 ? t->w : 1, h = t->h > 0 ? t->h : 1;
-    if (!t->dirty && tc->img && tc->w == w && tc->h == h) return tc;
+    if (!t->dirty && tc->img && tc->w == w && tc->h == h && tc->caret == caret) return tc;
+    tc->caret = caret;
     free(tc->img);
     tc->w = w; tc->h = h;
     tc->img = malloc(sizeof(uint32_t) * w * h);
@@ -153,6 +154,20 @@ static TextCache *text_render(Text *t) {
     }
     txt[k] = 0;
     DrawTextA(dc, txt, k, &rc, fmt);
+    if (caret) {
+        /* invoegpositie aan het eind van de laatste regel (links uitgelijnde naamvelden) */
+        const char *last = strrchr(txt, '\n');
+        last = last ? last + 1 : txt;
+        int nl = 0;
+        for (int i = 0; i < k; i++) if (txt[i] == '\n') nl++;
+        SIZE sz = {0, 0}, lh = {0, 0};
+        GetTextExtentPoint32A(dc, last, (int)strlen(last), &sz);
+        GetTextExtentPoint32A(dc, "Ag", 2, &lh);
+        RECT cr = {sz.cx + 1, nl * lh.cy, sz.cx + 2, nl * lh.cy + lh.cy};
+        HBRUSH br = CreateSolidBrush(RGB(fc >> 16 & 255, fc >> 8 & 255, fc & 255));
+        FillRect(dc, &cr, br);
+        DeleteObject(br);
+    }
     free(txt);
     GdiFlush();
     memcpy(tc->img, bits, (size_t)w * h * 4);
@@ -166,8 +181,8 @@ static TextCache *text_render(Text *t) {
     return tc;
 }
 
-static void draw_text(uint32_t *dst, int ox, int oy, int cw, int chh, Text *t, Channel *c, int l, int tp) {
-    TextCache *tc = text_render(t);
+static void draw_text(uint32_t *dst, int ox, int oy, int cw, int chh, Text *t, Channel *c, int l, int tp, int caret) {
+    TextCache *tc = text_render(t, caret);
     if (!tc) return;
     int transparent = c->ink == 36 || c->ink == 8 || c->ink == 1;
     for (int y = 0; y < tc->h; y++) {
@@ -220,6 +235,8 @@ static void draw_filmloop(uint32_t *dst, int ox, int oy, int cw, int chh, CastLi
 static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player *ctx) {
     Player *save = CP;
     CP = ctx;
+    int fch = ctx->mv ? player_focus_field() : 0;
+    int blink = (GetTickCount() / 500) & 1;
     for (int ch = 1; ch <= NCHAN; ch++) {
         Channel *c = &ctx->ch[ch];
         if (!c->visible || !c->member || !ctx->mv) continue;
@@ -237,7 +254,7 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
         }
         case MT_TEXT: case MT_BUTTON: {
             Text *tx = member_text(cl, m);
-            if (tx) draw_text(dst, ox, oy, cw, chh, tx, c, l, t);
+            if (tx) draw_text(dst, ox, oy, cw, chh, tx, c, l, t, ch == fch && !blink);
             break;
         }
         case MT_SHAPE: {

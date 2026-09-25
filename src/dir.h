@@ -343,6 +343,7 @@ void player_start(const char *movie);
 int player_tick(void);          /* 1 frame; geeft ms tot volgende frame */
 void player_mouse(int x, int y, int down_event, int up_event, int right);
 int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
+int player_focus_field(void);   /* kanaal van het editable veld met toetsenbordfocus in CP, of 0 */
 void player_key(int code, int ch, int down);
 void player_update_stage(void);
 Datum player_the(int name);

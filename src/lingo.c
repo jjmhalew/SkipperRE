@@ -1009,7 +1009,7 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             if (arg == 0 && id > 11) nt = 1;
             else if (arg == 1 || arg == 4 || arg == 6) nt = 1;
             else if (arg == 8 && id == 2) nt = 1;
-            else if (arg == 9 || arg == 10) nt = 2;
+            else if (arg == 9 || arg == 10 || arg == 11) nt = 2;   /* 11 = the ... of field x (castLib) */
             for (int i = nt - 1; i >= 0; i--) tg[i] = pop();
             push(player_get(arg, id, tg, nt));
             for (int i = 0; i < nt; i++) d_unref(tg[i]);
@@ -1022,7 +1022,7 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             Datum tg[2] = {VOIDD, VOIDD};
             int nt = 0;
             if (arg == 4 || arg == 6) nt = 1;
-            else if (arg == 9 || arg == 10) nt = 2;
+            else if (arg == 9 || arg == 10 || arg == 11) nt = 2;
             for (int i = nt - 1; i >= 0; i--) tg[i] = pop();
             player_set(arg, id, tg, nt, v);
             for (int i = 0; i < nt; i++) d_unref(tg[i]);

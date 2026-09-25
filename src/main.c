@@ -4,6 +4,7 @@
  *               [--shot N out.bmp]   (headless: N frames draaien, stage opslaan, stoppen)
  *               [--click x y F]      (headless: klik op (x,y) vlak voor frame F)
  *               [--drag x1 y1 x2 y2 F] (headless: slepen van (x1,y1) naar (x2,y2) vlak voor frame F)
+ *               [--key code char F]  (headless: toets met Mac-keyCode en teken (ASCII) vlak voor frame F)
  */
 #include "dir.h"
 #include <stdlib.h>
@@ -282,6 +283,7 @@ static int mac_keycode(int vk) {
         {VK_ESCAPE, 53}, {VK_RETURN, 36}, {VK_TAB, 48}, {VK_SPACE, 49}, {VK_BACK, 51}, {VK_DELETE, 117},
         {VK_LEFT, 123}, {VK_RIGHT, 124}, {VK_DOWN, 125}, {VK_UP, 126}, {VK_HOME, 115}, {VK_END, 119},
         {VK_PRIOR, 116}, {VK_NEXT, 121}, {VK_F1, 122}, {VK_F2, 120}, {VK_F3, 99}, {VK_F4, 118},
+        {VK_F5, 96}, {VK_F6, 97}, {VK_F7, 98}, {VK_F8, 100}, {VK_F9, 101}, {VK_F10, 109}, {VK_F11, 103}, {VK_F12, 111},
         {VK_ADD, 69}, {VK_SUBTRACT, 78}, {VK_OEM_PLUS, 24}, {VK_OEM_MINUS, 27},
         {'A', 0}, {'S', 1}, {'D', 2}, {'F', 3}, {'H', 4}, {'G', 5}, {'Z', 6}, {'X', 7}, {'C', 8}, {'V', 9},
         {'B', 11}, {'Q', 12}, {'W', 13}, {'E', 14}, {'R', 15}, {'Y', 16}, {'T', 17}, {'1', 18}, {'2', 19},
@@ -414,6 +416,7 @@ int main(int argc, char **argv) {
     int shot_frames = 0;
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
     int drags[16][5], ndrags = 0;
+    int keys[64][3], nkeys = 0;
     char bin[300] = "";
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
@@ -427,6 +430,10 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--drag") && i + 5 < argc && ndrags < 16) {
             for (int k = 0; k < 5; k++) drags[ndrags][k] = atoi(argv[++i]);
             ndrags++;
+        }
+        else if (!strcmp(argv[i], "--key") && i + 3 < argc && nkeys < 64) {
+            for (int k = 0; k < 3; k++) keys[nkeys][k] = atoi(argv[++i]);
+            nkeys++;
         }
         else if (!strcmp(argv[i], "--every") && i + 1 < argc) every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--dump")) dump = 1;
@@ -456,6 +463,11 @@ int main(int argc, char **argv) {
                     P.mouse_down = 0;   /* headless: de knop geldt meteen als losgelaten */
                     player_mouse(clicks[k][0], clicks[k][1], 1, 0, 0);
                     player_mouse(clicks[k][0], clicks[k][1], 0, 1, 0);
+                }
+            for (int k = 0; k < nkeys; k++)
+                if (frames == keys[k][2]) {   /* headless: toets (Mac-keyCode, teken) neer en los */
+                    player_key(keys[k][0], keys[k][1], 1);
+                    player_key(keys[k][0], keys[k][1], 0);
                 }
             for (int k = 0; k < ndrags; k++)
                 if (frames == drags[k][4]) {   /* headless: neer op (x1,y1), slepen naar (x2,y2), los */

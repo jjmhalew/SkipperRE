@@ -127,7 +127,7 @@ class Dec:
                 lib = st.pop()
                 return f'the number of castMembers of castLib {lib}'
             return f'the {ANIM2_PROPS.get(pid, pid)}'
-        if typ in (9, 10):
+        if typ in (9, 10, 11):   # 11 = field-properties (D5), zelfde id's als 9/10
             lib = st.pop()
             mem = st.pop()
             return (f'the {MEMBER_PROPS.get(pid, pid)} of {"member" if typ == 9 else "field"} {mem}'
