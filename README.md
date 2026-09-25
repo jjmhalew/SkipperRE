@@ -60,8 +60,8 @@ Semantiek die uit het spel bleek (en die de port nodig had):
 ```bash
 ./build.sh                                   # out/skipper.exe (debug-build met UBSan + PDB)
 OPT=-O0 DEFS=-DDBGHEAP ./build.sh            # met debug-heap
-./out/skipper.exe extract                    # spelen (venster 2x, geluid; de .BIN is niet nodig)
-./out/skipper.exe extract --bin D:/pad/SKIPPER_1.BIN --scale 1
+./out/skipper.exe extract                    # spelen (venster zo groot als past; Alt+Enter = volledig scherm)
+./out/skipper.exe extract --fullscreen       # meteen volledig scherm; --scale N voor een vaste venstergrootte
 # headless testen: N frames draaien, klikken/slepen, periodiek screenshots, globals/kanalen dumpen
 ./out/skipper.exe extract --click 320 240 170 --click 400 100 300 --shot 700 out/run --every 50 --dump
 ./out/skipper.exe extract --click 320 240 170 --click 320 393 300 --drag 100 350 150 450 420 --shot 520 out/coin --dump

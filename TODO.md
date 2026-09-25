@@ -91,7 +91,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 
 ## P3 — host / distribution
 
-- [ ] **Fullscreen** (Alt+Enter) and free window scaling. Now only integer `--scale`, no DPI awareness.
+- [x] **Fullscreen** (Alt+Enter, `--fullscreen`), resizable window with 4:3 letterbox, per-monitor DPI awareness,
+      default window size = largest scale that fits. *(not seen in a window yet: check!)*
 - [ ] Load data straight from the disc image (BIN/CUE, MDF or a real CD drive) instead of a prepared
       `extract/` folder. `tools/iso.py` has a hard-coded path.
 - [ ] Release build without UBSan (`OPT=-O2`, no `-g`), icon (`Magnus.ico`), version info.

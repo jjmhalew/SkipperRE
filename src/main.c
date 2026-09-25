@@ -21,7 +21,10 @@ static int g_headless;
 void palette_step(void);
 void player_idle(void);
 
-static int g_scale = 2;
+static int g_scale = 0;          /* beginvenster = 640x480 * g_scale; 0 = zo groot als past */
+static RECT g_dst = {0, 0, 1280, 960};   /* waar het podium in het venster staat (beeldverhouding 4:3) */
+static int g_fullscreen, g_start_fullscreen;
+static WINDOWPLACEMENT g_wp = {sizeof(WINDOWPLACEMENT)};
 static uint32_t *g_prev;       /* laatst getoonde stage (voor transities) */
 
 uint32_t now_ms(void) { return GetTickCount(); }
@@ -232,13 +235,65 @@ static void blit(const uint32_t *px) {
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
     SetStretchBltMode(dc, COLORONCOLOR);
-    StretchDIBits(dc, 0, 0, 640 * g_scale, 480 * g_scale, 0, 0, 640, 480, px, &bi, DIB_RGB_COLORS, SRCCOPY);
+    RECT cr;
+    GetClientRect(g_hwnd, &cr);
+    /* zwarte randen rond het podium (venster met andere verhouding, volledig scherm) */
+    if (g_dst.top > 0) PatBlt(dc, 0, 0, cr.right, g_dst.top, BLACKNESS);
+    if (g_dst.bottom < cr.bottom) PatBlt(dc, 0, g_dst.bottom, cr.right, cr.bottom - g_dst.bottom, BLACKNESS);
+    if (g_dst.left > 0) PatBlt(dc, 0, g_dst.top, g_dst.left, g_dst.bottom - g_dst.top, BLACKNESS);
+    if (g_dst.right < cr.right) PatBlt(dc, g_dst.right, g_dst.top, cr.right - g_dst.right, g_dst.bottom - g_dst.top, BLACKNESS);
+    StretchDIBits(dc, g_dst.left, g_dst.top, g_dst.right - g_dst.left, g_dst.bottom - g_dst.top, 0, 0, 640, 480, px, &bi,
+                  DIB_RGB_COLORS, SRCCOPY);
     ReleaseDC(g_hwnd, dc);
+}
+
+/* podium-rechthoek bij een nieuwe venstergrootte: zo groot mogelijk in 4:3, gecentreerd; een geheel
+ * veelvoud als dat bijna past (scherpere pixels) */
+static void layout(void) {
+    RECT cr;
+    if (!g_hwnd || !GetClientRect(g_hwnd, &cr)) return;   /* WM_SIZE kan al tijdens CreateWindow komen */
+    int cw = cr.right, ch = cr.bottom;
+    if (cw <= 0 || ch <= 0) return;
+    int w = cw, h = cw * 3 / 4;
+    if (h > ch) { h = ch; w = ch * 4 / 3; }
+    int k = w / 640;
+    if (k >= 1 && 640 * k >= w * 95 / 100) { w = 640 * k; h = 480 * k; }
+    g_dst.left = (cw - w) / 2; g_dst.top = (ch - h) / 2;
+    g_dst.right = g_dst.left + w; g_dst.bottom = g_dst.top + h;
+}
+
+/* vensterpixel -> podiumcoördinaat */
+static void to_stage(LPARAM lp, int *x, int *y) {
+    int mx = (short)LOWORD(lp), my = (short)HIWORD(lp);
+    int w = g_dst.right - g_dst.left, h = g_dst.bottom - g_dst.top;
+    *x = w > 0 ? (mx - g_dst.left) * 640 / w : mx;
+    *y = h > 0 ? (my - g_dst.top) * 480 / h : my;
+}
+
+/* Alt+Enter: randloos volledig scherm op de huidige monitor en weer terug */
+static void toggle_fullscreen(void) {
+    DWORD style = GetWindowLongA(g_hwnd, GWL_STYLE);
+    if (!g_fullscreen) {
+        MONITORINFO mi = {sizeof mi};
+        GetWindowPlacement(g_hwnd, &g_wp);
+        GetMonitorInfoA(MonitorFromWindow(g_hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+        SetWindowLongA(g_hwnd, GWL_STYLE, (style & ~WS_OVERLAPPEDWINDOW) | WS_POPUP);
+        SetWindowPos(g_hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                     mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        g_fullscreen = 1;
+    } else {
+        SetWindowLongA(g_hwnd, GWL_STYLE, (style & ~WS_POPUP) | WS_OVERLAPPEDWINDOW);
+        SetWindowPlacement(g_hwnd, &g_wp);
+        SetWindowPos(g_hwnd, NULL, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        g_fullscreen = 0;
+    }
+    layout();
+    InvalidateRect(g_hwnd, NULL, FALSE);
 }
 
 static void pump(void);
 
-/* Director-transities (codes 1..52): een benadering met wipes/center-out/dissolve */
+/* Director-transities (codes 1..52, zie trans.c), live in het venster */
 static void transition(const uint32_t *from, const uint32_t *to, int type, int dur, int chunk) {
     if (g_headless || dur <= 0) return;
     static uint32_t tmp[640 * 480];
@@ -363,9 +418,31 @@ static void drain_input(void) {
 }
 
 static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
-    int x = (short)LOWORD(lp) / g_scale, y = (short)HIWORD(lp) / g_scale;
+    int x, y;
+    to_stage(lp, &x, &y);
     switch (msg) {
     case WM_CLOSE: P.halted = 2; return 0;
+    case WM_SIZE: layout(); InvalidateRect(h, NULL, FALSE); return 0;
+    case WM_DPICHANGED: {   /* naar een monitor met een andere schaal: de voorgestelde grootte overnemen */
+        RECT *r = (RECT *)lp;
+        if (!g_fullscreen)
+            SetWindowPos(h, NULL, r->left, r->top, r->right - r->left, r->bottom - r->top, SWP_NOZORDER | SWP_NOACTIVATE);
+        return 0;
+    }
+    case WM_GETMINMAXINFO: {
+        MINMAXINFO *mm = (MINMAXINFO *)lp;
+        RECT r = {0, 0, 320, 240};
+        AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW, FALSE);
+        mm->ptMinTrackSize.x = r.right - r.left;
+        mm->ptMinTrackSize.y = r.bottom - r.top;
+        return 0;
+    }
+    case WM_SYSKEYDOWN:
+        if (wp == VK_RETURN && (lp & (1 << 29))) { toggle_fullscreen(); return 0; }
+        break;
+    case WM_SYSCHAR:
+        if (wp == VK_RETURN) return 0;   /* geen piep na Alt+Enter */
+        break;
     case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); EndPaint(h, &ps); if (stage_px) blit(stage_px); return 0; }
     case WM_MOUSEMOVE: P.mouse_x = x; P.mouse_y = y; return 0;
     case WM_LBUTTONDOWN: SetCapture(h); P.mouse_x = x; P.mouse_y = y; P.mouse_down = 1; qpush(1, x, y, 0, 0); return 0;
@@ -410,12 +487,23 @@ static void make_window(void) {
     wc.hCursor = NULL;
     wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
     RegisterClassA(&wc);
+    DWORD style = WS_OVERLAPPEDWINDOW;
+    if (g_scale <= 0) {   /* grootste gehele schaal waarbij het venster in het werkgebied past */
+        RECT wa;
+        SystemParametersInfoA(SPI_GETWORKAREA, 0, &wa, 0);
+        RECT fr = {0, 0, 640, 480};
+        AdjustWindowRect(&fr, style, FALSE);
+        int bw = (fr.right - fr.left) - 640, bh = (fr.bottom - fr.top) - 480;
+        g_scale = 1;
+        while (640 * (g_scale + 1) + bw <= wa.right - wa.left && 480 * (g_scale + 1) + bh <= wa.bottom - wa.top) g_scale++;
+    }
     RECT r = {0, 0, 640 * g_scale, 480 * g_scale};
-    DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
     AdjustWindowRect(&r, style, FALSE);
     g_hwnd = CreateWindowA("SkipperRE", "Skipper & Skeeto in Pretpark", style, CW_USEDEFAULT, CW_USEDEFAULT,
                            r.right - r.left, r.bottom - r.top, NULL, NULL, wc.hInstance, NULL);
+    layout();
     ShowWindow(g_hwnd, SW_SHOW);
+    if (g_start_fullscreen) toggle_fullscreen();
     g_cur_arrow = LoadCursor(NULL, IDC_ARROW);
     g_cur_wait = LoadCursor(NULL, IDC_WAIT);
 }
@@ -452,6 +540,11 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS *ep) {
 
 int main(int argc, char **argv) {
     SetUnhandledExceptionFilter(crash_filter);
+    {   /* echte pixels op schermen met schaal > 100% (anders schaalt Windows het venster wazig op) */
+        typedef BOOL(WINAPI * SetDpiCtx)(HANDLE);
+        SetDpiCtx f = (SetDpiCtx)(void *)GetProcAddress(GetModuleHandleA("user32.dll"), "SetProcessDpiAwarenessContext");
+        if (f) f((HANDLE)(intptr_t)-4);   /* DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 */
+    }
     const char *data = "extract", *movie = "start", *shot = NULL;
     int shot_frames = 0;
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
@@ -464,6 +557,7 @@ int main(int argc, char **argv) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
         else if (!strcmp(argv[i], "--bin") && i + 1 < argc) snprintf(bin, sizeof bin, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) g_scale = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "--fullscreen")) g_start_fullscreen = 1;
         else if (!strcmp(argv[i], "--trace")) vm_trace = 1;
         else if (!strcmp(argv[i], "--shot") && i + 2 < argc) { shot_frames = atoi(argv[++i]); shot = argv[++i]; g_headless = 1; }
         else if (!strcmp(argv[i], "--click") && i + 3 < argc && nclicks < 64) {
@@ -510,7 +604,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--dump")) dump = 1;
         else data = argv[i];
     }
-    if (g_scale < 1) g_scale = 1;
+    if (g_scale < 0) g_scale = 0;
     char full[MAX_PATH];
     GetFullPathNameA(data, sizeof full, full, NULL);
     player_init(full);
