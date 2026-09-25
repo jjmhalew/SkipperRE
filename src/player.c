@@ -132,6 +132,55 @@ static Member *chan_member(Channel *c, CastLib **cl) {
     return movie_member(CP->mv, c->lib, c->member, cl);
 }
 
+/* ------------------------------------------------------------------ digitale video */
+/* Gekoppelde AVI's: het spel verwijst naar R:\Magnus15\NL\Media\Video\x.avi; op de cd staan ze in Video\. */
+Video *member_video(Member *m) {
+    if (!m || m->type != MT_VIDEO) return NULL;
+    if (!m->video && !m->video_failed && m->file && m->file[0]) {
+        const char *sub[] = {"\\Video\\", "\\"};
+        char path[260];
+        for (int i = 0; i < 2 && !m->video; i++) {
+            snprintf(path, sizeof path, "%s%s%s", P.base_dir, sub[i], m->file);
+            m->video = video_open(path);
+        }
+        if (!m->video) {
+            vm_error("video niet gevonden: %s", m->file);
+            m->video_failed = 1;
+        }
+    }
+    return m->video;
+}
+
+static Video *chan_video(Channel *c) {
+    CastLib *cl;
+    return member_video(chan_member(c, &cl));
+}
+
+static int movie_time(Channel *c, Video *v) {
+    int t = c->movie_time0;
+    if (c->movie_rate) t += (int)((now_ms() - c->movie_t0) * 60ull / 1000) * c->movie_rate;
+    int d = v ? video_duration(v) : 0;
+    if (t > d) t = d;
+    return t < 0 ? 0 : t;
+}
+
+/* nieuwe tijd/snelheid vastleggen en het geluidsspoor meenemen (alleen normaal afspelen heeft geluid) */
+static void movie_update(Channel *c, int time, int rate) {
+    Video *v = chan_video(c);
+    c->movie_time0 = time;
+    c->movie_t0 = now_ms();
+    c->movie_rate = rate;
+    if (v && rate == 1) sound_video_play(video_audio(v), time / 60.0);
+    else sound_video_stop();
+}
+
+const uint32_t *chan_video_frame(Channel *c, int *w, int *h) {
+    Video *v = chan_video(c);
+    if (!v) return NULL;
+    *w = video_width(v); *h = video_height(v);
+    return video_frame(v, video_frame_at(v, movie_time(c, v)));
+}
+
 void sprite_rect(int ch, int *l, int *t, int *r, int *b) {
     Channel *c = chan(ch);
     *l = *t = *r = *b = 0;
@@ -149,6 +198,10 @@ void sprite_rect(int ch, int *l, int *t, int *r, int *b) {
     } else if (m && (m->type == MT_TEXT || m->type == MT_BUTTON)) {
         Text *tx = member_text(cl, m);
         if (tx && !c->stretch) { w = tx->w; h = tx->h; }
+    } else if (m && m->type == MT_VIDEO) {
+        int fw = m->rect_r - m->rect_l, fh = m->rect_b - m->rect_t;
+        if (!c->stretch) { w = fw; h = fh; }
+        rx = w / 2; ry = h / 2;   /* registratiepunt van video = midden */
     } else if (m && m->type == MT_FILMLOOP) {
         int fw = m->rect_r - m->rect_l, fh = m->rect_b - m->rect_t;
         if (!c->stretch) { w = fw; h = fh; }
@@ -162,19 +215,19 @@ void sprite_rect(int ch, int *l, int *t, int *r, int *b) {
 
 int sprite_hit(int ch, int x, int y) {
     Channel *c = chan(ch);
-    if (!c || !c->visible || !c->member) return 0;
+    if (!c || !c->visible || !c->member || c->killed) return 0;
     int l, t, r, b;
     sprite_rect(ch, &l, &t, &r, &b);
     if (x < l || x >= r || y < t || y >= b) return 0;
-    /* matte/background transparent: pixel moet niet-transparant zijn */
+    /* Alleen matte (8) en mask (9) klikken per pixel; bij alle andere inks, ook background transparent,
+     * telt de hele rechthoek (ABC-spel: de gaten in de letterknoppen zijn gewoon klikbaar). */
     CastLib *cl;
     Member *m = chan_member(c, &cl);
-    if (m && m->type == MT_BITMAP && (c->ink == 8 || c->ink == 36 || c->ink == 9)) {
+    if (m && m->type == MT_BITMAP && (c->ink == 8 || c->ink == 9)) {
         Bitmap *bm = member_bitmap(cl, m);
         if (bm && bm->w && bm->h && r > l && b > t) {
             int px = (x - l) * bm->w / (r - l), py = (y - t) * bm->h / (b - t);
-            uint8_t v = bm->px[py * bm->w + px];
-            if (v == (c->ink == 36 ? c->back : 0)) return 0;
+            if (bm->px[py * bm->w + px] == 0) return 0;
         }
     }
     return 1;
@@ -752,6 +805,8 @@ static Datum sprite_get(int ch, int id) {
     case 11: sprite_rect(ch, &l, &t, &r, &b); return d_int(l);
     case 13: return d_int(c->loch);
     case 14: return d_int(c->locv);
+    case 15: return d_int(c->movie_rate);
+    case 16: return d_int(movie_time(c, chan_video(c)));
     case 18: return d_int(c->puppet);
     case 19: sprite_rect(ch, &l, &t, &r, &b); return d_int(r);
     case 22: return d_int(c->stretch);
@@ -776,8 +831,23 @@ static void sprite_set(int ch, int id, Datum v) {
     if (!c) { d_unref(v); return; }
     int l, t, r, b;
     switch (id) {
+    case 1:   /* type 0 = leeg kanaal (ABC-spel: video uit), 16 = weer in gebruik */
+        c->type = d_toint(v);
+        c->killed = c->type == 0;
+        break;
     case 2: c->back = d_toint(v); break;
-    case 4: case 37: case 35: set_member(c, v); break;
+    case 4: case 37: case 35: {
+        int ol = c->lib, om = c->member;
+        set_member(c, v);
+        if (c->lib != ol || c->member != om) {   /* nieuwe member: video staat stil aan het begin */
+            if (c->movie_rate) sound_video_stop();
+            c->movie_rate = 0;
+            c->movie_time0 = 0;
+        }
+        break;
+    }
+    case 15: movie_update(c, movie_time(c, chan_video(c)), d_toint(v)); break;
+    case 16: movie_update(c, d_toint(v), c->movie_rate); break;
     case 6: d_unref(c->cursor); c->cursor = d_ref(v); break;
     case 7: c->fore = d_toint(v); break;
     case 8: c->h = d_toint(v); c->stretch = 1; break;
@@ -872,6 +942,7 @@ static Datum member_get(Datum mem, int name) {
         return d_point(rx, ry);
     }
     if (!_stricmp(n, "duration")) {
+        if (m->type == MT_VIDEO) { Video *v = member_video(m); return d_int(v ? video_duration(v) : 0); }
         Sound *s = m->type == MT_SOUND ? member_sound(cl, m) : NULL;
         return d_int(s && s->rate ? s->frames * 60 / s->rate : 0);
     }

@@ -23,7 +23,8 @@ fidelity/polish, **P3** = nice to have.
 - [x] **F5/F6/F7 hotkeys do nothing.** *(fixed)* `GlobalKeyDown` uses Mac keyCodes 96 (F5 = load), 97 (F6 = save)
       and 98 (F7 = options, `mmdlg1`), but `mac_keycode()` in `src/main.c` only maps F1–F4. Add
       F5=96, F6=97, F7=98, F8=100, F9=101, F10=109, F11=103, F12=111.
-- [ ] **Primary event handler outlives its movie.** In the minigames without their own
+- [x] **Primary event handler outlives its movie.** *(no-op: a missing handler does nothing and the event
+      passes on, which is the same as a reset; left as is)* In the minigames without their own
       `mouseDownScript` (MMB01/02/03/04/06/08/09/11) the Magnus handlers `MainMouseDown`/`MainMouseUp`
       stay set and are called in a movie that doesn't have them ("handler niet gevonden"). Harmless now
       (warning only). Find out whether D5 resets these on a movie switch or silently ignores a missing
@@ -31,13 +32,14 @@ fidelity/polish, **P3** = nice to have.
 
 ## P1 — missing features
 
-- [ ] **Digital video (ABC game, MMB09).** Every letter plays a clip: 26 linked AVIs in `extract/Video/`
+- [x] **Digital video (ABC game, MMB09).** *(done: `src/video.c`, own AVI parser + Cinepak decoder, audio track
+      on its own mixer voice; verified headless: letter → key → picture → apple video → point)* Every letter plays a clip: 26 linked AVIs in `extract/Video/`
       (66 MB), **Cinepak** 320×240 at 15 fps with 8-bit mono PCM at 11/22 kHz. The game uses
       `set the member of sprite 9`, `movieRate`, `movieTime`, `the duration of member` and the
       `gVideoPlaying`/`EndVideo` flow. Needed:
-  - [ ] parse linked `digitalVideo` cast members (type 10) and their file names
-  - [ ] AVI (RIFF) parser plus our own **Cinepak decoder**, to stay independent of Windows codecs
-  - [ ] sprite rendering of the current frame; `movieRate`/`movieTime`/`duration`; the audio track
+  - [x] parse linked `digitalVideo` cast members (type 10) and their file names
+  - [x] AVI (RIFF) parser plus our own **Cinepak decoder**, to stay independent of Windows codecs
+  - [x] sprite rendering of the current frame; `movieRate`/`movieTime`/`duration`; the audio track
         through the mixer
 - [ ] **`sound playFile` (external WAV).** Used by the spelling game (MMB10) for custom word lists:
       `gMMPath & "WAV\" & name`. Short WAV reader into the mixer.
@@ -47,7 +49,7 @@ fidelity/polish, **P3** = nice to have.
       format is known.
 - [ ] **Printing in the paint game (MMB11).** `PrintOMatic_Lite` is a no-op, so the print button does
       nothing. Proposal: save the drawing as PNG/BMP (plus the Windows print dialog if wanted).
-- [ ] `the searchCurrentFolder` (movie prop, set once in Magnus): accept it and ignore it.
+- [x] `the searchCurrentFolder` (movie prop, set once in Magnus): accept it and ignore it.
 
 ## Verification — content not played through yet
 

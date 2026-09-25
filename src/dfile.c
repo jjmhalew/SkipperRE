@@ -125,6 +125,11 @@ CastLib *cast_load(DFile *f, int first, int lib, int owner) {
                 const uint8_t *base = info + doff + 2 + 4 * (cnt + 1);
                 if (o2 > o1) m->name = pstr_dup(base + o1, (int)(o2 - o1));
             }
+            if (cnt >= 4) {   /* gekoppelde bestanden (video): item 2 = map, item 3 = bestandsnaam */
+                uint32_t o3 = be32(info + doff + 2 + 12), o4 = be32(info + doff + 2 + 16);
+                const uint8_t *base = info + doff + 2 + 4 * (cnt + 1);
+                if (o4 > o3) m->file = pstr_dup(base + o3, (int)(o4 - o3));
+            }
         }
         if (!m->name) m->name = strdup("");
         if (m->type == MT_SCRIPT && spec_len >= 2) m->script_type = be16(m->spec);
@@ -135,7 +140,7 @@ CastLib *cast_load(DFile *f, int first, int lib, int owner) {
             m->rect_b = (int16_t)be16(s + 6); m->rect_r = (int16_t)be16(s + 8);
             m->shape_fore = s[12]; m->shape_back = s[13]; m->shape_filled = s[14]; m->shape_line = s[15];
         }
-        if (m->type == MT_FILMLOOP && spec_len >= 8) {
+        if ((m->type == MT_FILMLOOP || m->type == MT_VIDEO) && spec_len >= 8) {   /* initialRect */
             const uint8_t *s = m->spec;
             m->rect_t = (int16_t)be16(s); m->rect_l = (int16_t)be16(s + 2);
             m->rect_b = (int16_t)be16(s + 4); m->rect_r = (int16_t)be16(s + 6);

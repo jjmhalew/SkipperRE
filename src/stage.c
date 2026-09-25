@@ -239,7 +239,7 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
     int blink = (GetTickCount() / 500) & 1;
     for (int ch = 1; ch <= NCHAN; ch++) {
         Channel *c = &ctx->ch[ch];
-        if (!c->visible || !c->member || !ctx->mv) continue;
+        if (!c->visible || !c->member || !ctx->mv || c->killed) continue;
         CastLib *cl;
         Member *m = movie_member(ctx->mv, c->lib, c->member, &cl);
         if (!m) continue;
@@ -274,6 +274,17 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
         case MT_FILMLOOP:
             draw_filmloop(dst, ox, oy, cw, chh, cl, m, c, l, t);
             break;
+        case MT_VIDEO: {   /* digitale video: huidig frame, geschaald naar de sprite-rect (copy-ink) */
+            int vw, vh;
+            const uint32_t *px = chan_video_frame(c, &vw, &vh);
+            if (!px || r <= l || b <= t) break;
+            for (int y = t < 0 ? 0 : t; y < b && y < chh; y++) {
+                const uint32_t *src = px + (size_t)((y - t) * vh / (b - t)) * vw;
+                for (int x = l < 0 ? 0 : l; x < r && x < cw; x++)
+                    dst[(oy + y) * SW + ox + x] = src[(x - l) * vw / (r - l)];
+            }
+            break;
+        }
         }
     }
     CP = save;
@@ -297,17 +308,19 @@ void stage_compose(void) {
     }
 }
 
-void stage_screenshot(const char *path) {
+void bmp_write(const char *path, const uint32_t *px, int w, int hgt) {
     FILE *f = fopen(path, "wb");
     if (!f) return;
     uint8_t hdr[54] = {'B', 'M'};
-    uint32_t size = 54 + SW * SH * 4;
+    uint32_t size = 54 + (uint32_t)(w * hgt * 4);
     memcpy(hdr + 2, &size, 4);
     uint32_t v = 54; memcpy(hdr + 10, &v, 4);
     v = 40; memcpy(hdr + 14, &v, 4);
-    int32_t w = SW, h = -SH; memcpy(hdr + 18, &w, 4); memcpy(hdr + 22, &h, 4);
+    int32_t ww = w, h = -hgt; memcpy(hdr + 18, &ww, 4); memcpy(hdr + 22, &h, 4);
     uint16_t planes = 1, bpp = 32; memcpy(hdr + 26, &planes, 2); memcpy(hdr + 28, &bpp, 2);
     fwrite(hdr, 1, 54, f);
-    fwrite(stage_px, 4, SW * SH, f);
+    fwrite(px, 4, (size_t)w * hgt, f);
     fclose(f);
 }
+
+void stage_screenshot(const char *path) { bmp_write(path, stage_px, SW, SH); }

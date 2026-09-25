@@ -151,6 +151,7 @@ typedef struct Text {
 } Text;
 
 struct Score;
+typedef struct Video Video;
 typedef struct Member {
     int type;
     char *name;
@@ -168,6 +169,9 @@ typedef struct Member {
     int shape_type, shape_fore, shape_back, shape_filled, shape_line;
     int rect_l, rect_t, rect_r, rect_b;
     int purge;
+    char *file;         /* gekoppeld bestand (digitalVideo), zonder map */
+    struct Video *video;
+    int video_failed;
 } Member;
 
 typedef struct CastLib {
@@ -289,6 +293,10 @@ typedef struct Channel {
     Datum cursor;
     int slib, script;   /* scorescript */
     int type;
+    int killed;         /* `set the type of sprite to 0`: niet tekenen, niet klikbaar */
+    int movie_rate;     /* digitale video: 0 = stil */
+    uint32_t movie_t0;  /* ms waarop movie_time0 gold */
+    int movie_time0;    /* ticks */
 } Channel;
 
 #define NCHAN 48
@@ -342,6 +350,18 @@ void player_init(const char *base_dir);
 void player_start(const char *movie);
 int player_tick(void);          /* 1 frame; geeft ms tot volgende frame */
 void player_mouse(int x, int y, int down_event, int up_event, int right);
+/* video.c: AVI met Cinepak */
+Video *video_open(const char *path);
+void video_free(Video *v);
+int video_width(Video *v);
+int video_height(Video *v);
+int video_frames(Video *v);
+int video_duration(Video *v);                 /* ticks */
+int video_frame_at(Video *v, int ticks);
+const uint32_t *video_frame(Video *v, int n);  /* 0xAARRGGBB, w*h */
+Sound *video_audio(Video *v);
+Video *member_video(Member *m);   /* laadt het gekoppelde AVI-bestand lui */
+void bmp_write(const char *path, const uint32_t *px, int w, int h);
 int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
 int player_focus_field(void);   /* kanaal van het editable veld met toetsenbordfocus in CP, of 0 */
 void player_key(int code, int ch, int down);
@@ -363,6 +383,9 @@ void sound_play_member(int ch, CastLib *c, Member *m);
 void sound_stop(int ch);
 int sound_busy(int ch);
 void sound_set_level(int lvl);
+void sound_video_play(Sound *s, double offset);
+void sound_video_stop(void);
+const uint32_t *chan_video_frame(Channel *c, int *w, int *h);   /* huidig videoframe van een kanaal */
 void cd_play_track(int track);
 void cd_stop(void);
 int cd_playing(void);

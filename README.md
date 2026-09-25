@@ -34,6 +34,7 @@ Wise-installer gehaalde `start32.exe` in `game/` (beide staan in `.gitignore`).
 | `src/player.c` | films, frames, events (sprite → castlid → frame → movie), puppets, sprite-/member-properties, `go`, paletten, transities, MIAW-vensters |
 | `src/stage.c` | compositie naar 32-bit met inks (copy, matte, bg transparent, blend, ...), tekst via GDI, vormen, filmloops |
 | `src/xobj.c` | INI, FileIO, MovUtils, DLLGlue → MMSYS.DLL (CD-audio, LoadSaveGame), KEYBOARD.DLL, USER.EXE |
+| `src/video.c` | digitale video: AVI-parser en eigen Cinepak-decoder (ABC-spel), geluidsspoor via de mixer |
 | `src/sound.c` | waveOut-mixer, CD-audio rechtstreeks uit `SKIPPER_1.BIN` via de `.CUE` |
 | `src/main.c` | Win32-venster, timing, invoer (Mac-keyCodes), cursors, headless testmodus, crash-handler |
 | `src/dbgheap.c` | debug-heap (`DEFS=-DDBGHEAP`): canaries + quarantaine, meldt bestand:regel |
@@ -51,6 +52,10 @@ Semantiek die uit het spel bleek (en die de port nodig had):
 - Het sprite-script komt ook bij puppet-sprites uit het huidige frame (Magnus frame 3 zet het per
   ongeluk op kanaal 10; in frame 4 staat het op 11, de brievenbus).
 - `moveableSprite`: Director sleept de sprite zelf; bij loslaten ziet `mouseUp` de nieuwe positie.
+- Klikken: alleen matte- en mask-ink testen per pixel; bij background transparent telt de hele rechthoek.
+- Editable velden (textFlags bit 0): toetsen gaan eerst naar het sprite-script van het veld; alleen wat
+  niet afgevangen wordt (of `pass` doet) komt in het veld. `set the textFont of field` is get/set-type 11.
+- Digitale video: registratiepunt in het midden; `movieTime`/`duration` in ticks.
 
 ```bash
 ./build.sh                                   # out/skipper.exe (debug-build met UBSan + PDB)

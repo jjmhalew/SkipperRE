@@ -10,9 +10,10 @@
 #define NBUF 4
 #define BUFFRAMES 1024
 #define NCH 8
+#define VVOICE (NCH + 1)   /* extra stem voor het geluid van digitale video */
 
 typedef struct Voice { Sound *s; double pos, step; int playing; uint32_t start, dur; } Voice;
-static Voice g_v[NCH + 1];
+static Voice g_v[NCH + 2];
 static CRITICAL_SECTION g_cs;
 static HWAVEOUT g_wo;
 static WAVEHDR g_hdr[NBUF];
@@ -32,7 +33,7 @@ static void mix(int16_t *out, int frames) {
     static int32_t acc[BUFFRAMES * 2];
     memset(acc, 0, sizeof(int32_t) * frames * 2);
     EnterCriticalSection(&g_cs);
-    for (int c = 1; c <= NCH; c++) {
+    for (int c = 1; c <= VVOICE; c++) {
         Voice *v = &g_v[c];
         if (!v->playing || !v->s) continue;
         Sound *s = v->s;
@@ -187,3 +188,21 @@ void cd_stop(void) {
 }
 
 int cd_playing(void) { return g_cd_track != 0; }
+
+/* geluidsspoor van een video vanaf offset (seconden) */
+void sound_video_play(Sound *s, double offset) {
+    if (!s || !s->rate) return;
+    EnterCriticalSection(&g_cs);
+    g_v[VVOICE].s = s;
+    g_v[VVOICE].pos = offset * s->rate;
+    g_v[VVOICE].step = (double)s->rate / RATE;
+    g_v[VVOICE].playing = g_v[VVOICE].pos < s->frames;
+    LeaveCriticalSection(&g_cs);
+}
+
+void sound_video_stop(void) {
+    EnterCriticalSection(&g_cs);
+    g_v[VVOICE].playing = 0;
+    g_v[VVOICE].s = NULL;
+    LeaveCriticalSection(&g_cs);
+}

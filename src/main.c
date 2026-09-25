@@ -435,6 +435,15 @@ int main(int argc, char **argv) {
             for (int k = 0; k < 3; k++) keys[nkeys][k] = atoi(argv[++i]);
             nkeys++;
         }
+        else if (!strcmp(argv[i], "--avi") && i + 3 < argc) {   /* test: één videoframe naar BMP */
+            Video *v = video_open(argv[i + 1]);
+            if (!v) return 1;
+            int fr = atoi(argv[i + 2]);
+            bmp_write(argv[i + 3], video_frame(v, fr), video_width(v), video_height(v));
+            printf("%dx%d, %d frames, %d ticks, audio %d samples\n", video_width(v), video_height(v), video_frames(v),
+                   video_duration(v), video_audio(v) ? video_audio(v)->frames : 0);
+            return 0;
+        }
         else if (!strcmp(argv[i], "--every") && i + 1 < argc) every = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--dump")) dump = 1;
         else data = argv[i];
