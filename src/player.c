@@ -313,11 +313,24 @@ static int sprite_active(int ch) {
     return m && m->script != NULL;
 }
 
-static int sprite_under(int x, int y, int active_only) {
+/* Sprite die de muis opvangt: met script, moveable, editable of met een eigen cursor. Een kale sprite
+ * (bijv. de voorgrond LocE2F over de emmer en de uitgang onderaan in E2) laat de muis door. */
+static int field_editable(Player *ctx, int ch);
+static int sprite_mousable(int ch) {
+    Channel *c = chan(ch);
+    if (!c) return 0;
+    int cur = c->cursor.t != T_VOID && !(c->cursor.t == T_INT && c->cursor.u.i == 0);
+    return sprite_active(ch) || c->moveable || cur || field_editable(CP, ch);
+}
+
+/* mode 0: bovenste sprite, 1: bovenste met script, 2: bovenste die de muis opvangt */
+static int sprite_under(int x, int y, int mode) {
     for (int ch = NCHAN; ch >= 1; ch--)
-        if (sprite_hit(ch, x, y) && (!active_only || sprite_active(ch))) return ch;
+        if (sprite_hit(ch, x, y) && (mode == 0 || (mode == 1 ? sprite_active(ch) : sprite_mousable(ch)))) return ch;
     return 0;
 }
+
+int sprite_mouse_target(int x, int y) { return sprite_under(x, y, 2); }
 
 static int run_primary(Datum script) {
     /* geeft 1 terug als het event NIET verder mag */
@@ -547,7 +560,7 @@ void player_mouse(int x, int y, int down, int up, int right) {
         int ch = sprite_under(lx, ly, 1);
         P.click_on = ch;
         P.last_click = (int)now_ms();
-        int top = sprite_under(lx, ly, 0);
+        int top = sprite_under(lx, ly, 2);
         if (!right && top && field_editable(CP, top)) { g_focus_ctx = CP; g_focus_ch = top; }
         if (!right && top && CP->ch[top].moveable) {
             g_drag_ctx = CP;

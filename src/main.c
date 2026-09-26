@@ -384,11 +384,8 @@ static HCURSOR bitmap_cursor(Datum lst) {
 static HCURSOR current_cursor(void) {
     /* sprite-cursor onder de muis, anders de globale cursor() */
     Datum c = VOIDD;
-    for (int ch = NCHAN; ch >= 1; ch--)
-        if (sprite_hit(ch, P.mouse_x, P.mouse_y)) {
-            if (P.ch[ch].cursor.t != T_VOID && !(P.ch[ch].cursor.t == T_INT && P.ch[ch].cursor.u.i == 0)) c = P.ch[ch].cursor;
-            break;
-        }
+    int ch = sprite_mouse_target(P.mouse_x, P.mouse_y);
+    if (ch && P.ch[ch].cursor.t != T_VOID && !(P.ch[ch].cursor.t == T_INT && P.ch[ch].cursor.u.i == 0)) c = P.ch[ch].cursor;
     if (c.t == T_VOID) c = *global_ref(sym("_cursor"));
     if (c.t == T_LIST) return bitmap_cursor(c);
     if (c.t == T_INT && c.u.i == 4) return g_cur_wait;

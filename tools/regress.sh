@@ -43,6 +43,9 @@ wait
 SHOT=560 check mailbox "Mailbox.*open\|OBD5B0[2-5]" $INTRO --click 320 393 300 --click 398 268 420 &
 SHOT=520 check coin "gPoints = 3" $INTRO --click 320 393 300 --drag 100 350 150 450 420 &
 SHOT=900 check boss "gCurrentLoc = #E6" $INTRO --click 320 393 300 --click 320 393 400 --click 615 200 470 &
+# E2: emmer onder de voorgrond (kale sprite) naar de zak slepen
+E2="--click 320 393 300 --click 615 200 400 --click 400 180 500 --click 200 125 600 --click 170 160 700"
+SHOT=950 check bucket "ch 35. 1:49 BucketS" $INTRO $E2 --drag 552 385 60 450 800 &
 SHOT=360 check savedlg "van Magnus" $INTRO --key 97 0 300 &
 wait
 exit $FAIL

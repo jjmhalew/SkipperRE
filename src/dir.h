@@ -386,6 +386,7 @@ void builtins_register(void);
 extern uint32_t *stage_px;     /* 640x480 BGRA */
 void stage_compose(void);
 int sprite_hit(int ch, int x, int y);
+int sprite_mouse_target(int x, int y);   /* bovenste sprite die de muis opvangt */
 void sprite_rect(int ch, int *l, int *t, int *r, int *b);
 void stage_present(void);      /* main.c */
 void stage_screenshot(const char *path);
