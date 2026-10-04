@@ -5,8 +5,8 @@
  *   - meldingen in Androids eigen dialoog (SDL's berichtvenster laat in liggend formaat zijn knoppen onder het scherm)
  *   - stderr naar skipper.log in de app-map
  *   - aanraken: de eerste vinger is de muis; knoppen in de zwarte balken naast het beeld (of achter een menuknop als
- *     het scherm 4:3 is) voor wat op de pc onder F-toetsen zit: laden, opslaan, uitleg, ondertitels, muziek, volume,
- *     stoppen. */
+ *     het scherm 4:3 is) voor wat op de pc onder F-toetsen zit: laden, opslaan, uitleg, stoppen, ondertitels en muziek
+ *     (met aan / uit) en het volume (met de meter van het spel). */
 #ifdef __ANDROID__
 #include "dir.h"
 #undef fopen
@@ -127,22 +127,33 @@ void android_init(void) {
 }
 
 /* ------------------------------------------------------------------ aanraken */
+/* De knoppen in de kleuren van de onderbalk van het spel: cyaan met een donkerblauwe rand, ingedrukt lichtcyaan;
+ * een schakelaar die aan staat is groen zoals de EXIT-knop. Ondertitels en muziek laten zien of ze aan of uit staan
+ * (de globals van het spel zelf), het volume is één paneel met de rode meter van het spel en knoppen - en +. */
 void host_sdl_to_stage(float wx, float wy, int *x, int *y);   /* host_sdl.c */
-typedef struct Btn { const char *label; int code, ch; SDL_Rect r; SDL_Texture *tex; int tw, th; } Btn;
+enum { K_KEY, K_TOGGLE, K_DOWN, K_UP };
+typedef struct Btn { const char *label; int code, ch, kind; const char *global; SDL_Rect r; SDL_Texture *tex; int tw, th; } Btn;
 static Btn g_btn[] = {
-    {"Laden", 96, 0}, {"Opslaan", 97, 0}, {"Uitleg", 122, 0}, {"Stoppen", 53, 27},
-    {"Tekst", 120, 0}, {"Muziek", 99, 0}, {"Zachter", 125, 0}, {"Harder", 126, 0},
+    {"Laden", 96, 0, K_KEY}, {"Opslaan", 97, 0, K_KEY}, {"Uitleg", 122, 0, K_KEY}, {"Stoppen", 53, 27, K_KEY},
+    {"Tekst", 120, 0, K_TOGGLE, "gSubTextOn"}, {"Muziek", 99, 0, K_TOGGLE, "gBkgSoundOn"},
+    {"Zachter", 125, 0, K_DOWN}, {"Harder", 126, 0, K_UP},
 };
 #define NBTN (int)(sizeof g_btn / sizeof *g_btn)
 static int g_side;               /* 1: knoppen in de zijbalken, 0: achter de menuknop */
 static int g_menu_open;
 static SDL_Rect g_menu;          /* de menuknop (alleen als g_side == 0) */
-static SDL_Texture *g_menu_tex;
+static SDL_Rect g_vol;           /* het volumepaneel (alleen als g_side) */
+static SDL_Texture *g_menu_tex, *g_on_tex, *g_off_tex, *g_vol_tex;
+static int g_menu_tw, g_on_tw, g_off_tw, g_vol_tw, g_small_th;
 static int g_pressed = -1;       /* knop onder de vinger */
 static SDL_FingerID g_mouse_finger = -1, g_btn_finger = -1;
 static int g_label_h;
 
-/* label als witte tekst op doorzichtig (text_raster tekent zwart op wit) */
+typedef struct Rgb { Uint8 r, g, b; } Rgb;
+static const Rgb C_FACE = {47, 178, 210}, C_LIGHT = {184, 231, 231}, C_EDGE = {0, 0, 128}, C_CREAM = {255, 251, 240},
+                 C_ON = {107, 221, 111}, C_ON_EDGE = {0, 128, 0}, C_RED = {255, 0, 0};
+
+/* label als witte tekst op doorzichtig (text_raster tekent zwart op wit); kleuren met SDL_SetTextureColorMod */
 static SDL_Texture *label(SDL_Renderer *r, const char *s, int px, int *tw, int *th) {
     Text t;
     memset(&t, 0, sizeof t);
@@ -167,6 +178,17 @@ static SDL_Texture *label(SDL_Renderer *r, const char *s, int px, int *tw, int *
     return tex;
 }
 
+static void relabel(SDL_Texture **tex, SDL_Renderer *r, const char *s, int px, int *tw, int *th) {
+    if (*tex) SDL_DestroyTexture(*tex);
+    *tex = label(r, s, px, tw, th);
+}
+
+/* 1 / 0 voor een global van het spel, -1 als die er (nog) niet is */
+static int game_flag(const char *name) {
+    Datum *g = global_find(sym(name));
+    return g ? d_toint(*g) != 0 : -1;
+}
+
 static void layout(SDL_Renderer *r) {
     int ow, oh;
     SDL_GetRendererOutputSize(r, &ow, &oh);
@@ -175,58 +197,119 @@ static void layout(SDL_Renderer *r) {
     int bar = (ow - sw) / 2;
     g_side = bar >= oh / 9;
     int lh;
-    if (g_side) {   /* 4 knoppen per zijbalk */
+    if (g_side) {   /* links laden, opslaan, uitleg, stoppen; rechts tekst, muziek en het volumepaneel (twee plaatsen) */
         int bw = bar * 85 / 100, bh = oh / 5;
         if (bh > bw) bh = bw;
         int gap = (oh - 4 * bh) / 5;
-        for (int i = 0; i < NBTN; i++) {
+        for (int i = 0; i < 6; i++) {
             int col = i / 4, row = i % 4;
             g_btn[i].r = (SDL_Rect){col ? ow - bar + (bar - bw) / 2 : (bar - bw) / 2, gap + row * (bh + gap), bw, bh};
         }
+        g_vol = (SDL_Rect){ow - bar + (bar - bw) / 2, gap + 2 * (bh + gap), bw, 2 * bh + gap};
+        int pad = bw / 14, kw = (bw - 3 * pad) / 2, kh = g_vol.h * 36 / 100;
+        g_btn[6].r = (SDL_Rect){g_vol.x + pad, g_vol.y + g_vol.h - pad - kh, kw, kh};
+        g_btn[7].r = (SDL_Rect){g_vol.x + 2 * pad + kw, g_vol.y + g_vol.h - pad - kh, kw, kh};
         lh = bh / 4;
         if (lh > bw / 6) lh = bw / 6;
     } else {        /* een menuknop linksboven; open: een rij knoppen bovenin */
         int m = oh / 11, x0 = (ow - sw) / 2, y0 = (oh - sh) / 2;
         g_menu = (SDL_Rect){x0 + m / 4, y0 + m / 4, m, m};
-        int bw = (sw - m * 3 / 2) / NBTN, bh = m;
+        int bw = (sw - m * 3 / 2) / NBTN, bh = m * 5 / 4;
         for (int i = 0; i < NBTN; i++) g_btn[i].r = (SDL_Rect){x0 + m * 3 / 2 + i * bw, y0 + m / 4, bw - 4, bh};
-        lh = bh / 3;
+        lh = bh / 4;
         if (lh > bw / 6) lh = bw / 6;
     }
     if (lh < 8) lh = 8;
     if (lh != g_label_h) {   /* labels opnieuw op deze grootte */
         g_label_h = lh;
-        for (int i = 0; i < NBTN; i++) {
-            if (g_btn[i].tex) SDL_DestroyTexture(g_btn[i].tex);
-            g_btn[i].tex = label(r, g_btn[i].label, lh, &g_btn[i].tw, &g_btn[i].th);
-        }
-        int tw, th;
-        if (g_menu_tex) SDL_DestroyTexture(g_menu_tex);
-        g_menu_tex = label(r, "Menu", lh, &tw, &th);
+        for (int i = 0; i < NBTN; i++) relabel(&g_btn[i].tex, r, g_btn[i].label, lh, &g_btn[i].tw, &g_btn[i].th);
+        int th, sl = lh * 3 / 4 < 8 ? 8 : lh * 3 / 4;
+        relabel(&g_menu_tex, r, "Menu", lh, &g_menu_tw, &th);
+        relabel(&g_vol_tex, r, "Volume", lh, &g_vol_tw, &th);
+        relabel(&g_on_tex, r, "aan", sl, &g_on_tw, &g_small_th);
+        relabel(&g_off_tex, r, "uit", sl, &g_off_tw, &g_small_th);
     }
 }
 
-static void draw_button(SDL_Renderer *r, SDL_Rect *b, SDL_Texture *tex, int tw, int th, int down) {
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(r, down ? 0xf0 : 0x20, down ? 0x60 : 0x50, down ? 0x30 : 0x90, 200);
+static void fill(SDL_Renderer *r, const SDL_Rect *b, Rgb c) {
+    SDL_SetRenderDrawColor(r, c.r, c.g, c.b, 255);
     SDL_RenderFillRect(r, b);
-    SDL_SetRenderDrawColor(r, 255, 255, 255, 220);
-    SDL_RenderDrawRect(r, b);
-    if (tex) {
-        SDL_Rect s = {0, 0, tw, th}, d = {b->x + (b->w - tw) / 2, b->y + (b->h - th) / 2, tw, th};
-        if (d.w > b->w - 4) { s.w = d.w = b->w - 4; d.x = b->x + 2; }
-        SDL_RenderCopy(r, tex, &s, &d);
+}
+
+/* vlak met een rand (dikte naar de grootte) en een lichte binnenrand links- en bovenaan */
+static void face(SDL_Renderer *r, const SDL_Rect *b, Rgb c, Rgb edge, int bevel) {
+    int e = b->w / 50 + 2;
+    fill(r, b, edge);
+    SDL_Rect in = {b->x + e, b->y + e, b->w - 2 * e, b->h - 2 * e};
+    fill(r, &in, c);
+    if (bevel) {
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 255, 255, 255, 110);
+        SDL_Rect t = {in.x, in.y, in.w, e / 2 + 1}, l = {in.x, in.y, e / 2 + 1, in.h};
+        SDL_RenderFillRect(r, &t);
+        SDL_RenderFillRect(r, &l);
+    }
+}
+
+/* tekst gecentreerd op (cx, cy) */
+static void text_at(SDL_Renderer *r, SDL_Texture *tex, int tw, int th, int cx, int cy, int maxw, Rgb c) {
+    if (!tex) return;
+    SDL_Rect s = {0, 0, tw, th}, d = {cx - tw / 2, cy - th / 2, tw, th};
+    if (d.w > maxw) { s.w = d.w = maxw; d.x = cx - maxw / 2; }
+    SDL_SetTextureColorMod(tex, c.r, c.g, c.b);
+    SDL_RenderCopy(r, tex, &s, &d);
+}
+
+static void draw_button(SDL_Renderer *r, Btn *b, int down) {
+    const SDL_Rect *q = &b->r;
+    int st = b->kind == K_TOGGLE ? game_flag(b->global) : -1;
+    Rgb c = down ? C_LIGHT : st == 1 ? C_ON : C_FACE, ink = down ? C_EDGE : C_CREAM;
+    face(r, q, c, st == 1 && !down ? C_ON_EDGE : C_EDGE, !down);
+    int cx = q->x + q->w / 2, cy = q->y + q->h / 2;
+    if (g_side && (b->kind == K_DOWN || b->kind == K_UP)) {   /* - en + als dikke strepen */
+        int len = (q->w < q->h ? q->w : q->h) * 45 / 100, th = len / 5 + 1;
+        SDL_Rect h = {cx - len / 2, cy - th / 2, len, th}, v = {cx - th / 2, cy - len / 2, th, len};
+        fill(r, &h, ink);
+        if (b->kind == K_UP) fill(r, &v, ink);
+        return;
+    }
+    if (st < 0) { text_at(r, b->tex, b->tw, b->th, cx, cy, q->w - 6, ink); return; }
+    /* schakelaar: naam en daaronder aan / uit */
+    text_at(r, b->tex, b->tw, b->th, cx, q->y + q->h * 38 / 100, q->w - 6, ink);
+    if (st) text_at(r, g_on_tex, g_on_tw, g_small_th, cx, q->y + q->h * 72 / 100, q->w - 6, ink);
+    else text_at(r, g_off_tex, g_off_tw, g_small_th, cx, q->y + q->h * 72 / 100, q->w - 6, ink);
+}
+
+/* volumepaneel: lichtcyaan zoals het vak met de boomstam, "Volume" en de oplopende rode streepjes van het spel */
+static void draw_volume(SDL_Renderer *r) {
+    face(r, &g_vol, C_LIGHT, C_EDGE, 0);
+    int pad = g_vol.w / 14, top = g_btn[6].r.y - pad;   /* ruimte boven de knoppen */
+    int ty = g_vol.y + pad + g_label_h * 3 / 4;
+    text_at(r, g_vol_tex, g_vol_tw, g_label_h * 3 / 2, g_vol.x + g_vol.w / 2, ty, g_vol.w - 6, C_EDGE);
+    int my0 = ty + g_label_h, mh = top - my0, mw = g_vol.w - 2 * pad;
+    if (mh < 6) return;
+    int lvl = P.sound_level, n = 7, sw = mw / n, gap = sw / 5 + 1;
+    for (int i = 0; i < n; i++) {
+        int h = mh * (i + 2) / (n + 1);
+        SDL_Rect s = {g_vol.x + pad + i * sw, my0 + mh - h, sw - gap, h};
+        if (i < lvl) fill(r, &s, C_RED);
+        else {
+            SDL_SetRenderDrawColor(r, C_EDGE.r, C_EDGE.g, C_EDGE.b, 255);
+            SDL_RenderDrawRect(r, &s);
+        }
     }
 }
 
 void touch_draw(SDL_Renderer *r) {
     layout(r);   /* in renderer-pixels, ook in de balken */
+    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_NONE);
+    if (g_side) draw_volume(r);
     if (g_side || g_menu_open)
-        for (int i = 0; i < NBTN; i++) draw_button(r, &g_btn[i].r, g_btn[i].tex, g_btn[i].tw, g_btn[i].th, g_pressed == i);
+        for (int i = 0; i < NBTN; i++) draw_button(r, &g_btn[i], g_pressed == i);
     if (!g_side) {
-        int tw = 0, th = 0;
-        if (g_menu_tex) SDL_QueryTexture(g_menu_tex, NULL, NULL, &tw, &th);
-        draw_button(r, &g_menu, g_menu_tex, g_menu.w - 4 < tw ? g_menu.w - 4 : tw, th, g_menu_open);
+        face(r, &g_menu, g_menu_open ? C_LIGHT : C_FACE, C_EDGE, !g_menu_open);
+        text_at(r, g_menu_tex, g_menu_tw, g_label_h * 3 / 2, g_menu.x + g_menu.w / 2, g_menu.y + g_menu.h / 2, g_menu.w - 4,
+                g_menu_open ? C_EDGE : C_CREAM);
     }
 }
 
