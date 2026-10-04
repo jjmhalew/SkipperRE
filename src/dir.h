@@ -180,6 +180,7 @@ typedef struct Member {
 } Member;
 
 typedef struct CastLib {
+    uint32_t info_flags; /* vlaggen uit de info-kop; geluid: 16 = niet herhalen */
     char name[64];
     DFile *f;
     int first, n;       /* nummers first .. first+n-1 */

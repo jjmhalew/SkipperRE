@@ -113,6 +113,7 @@ CastLib *cast_load(DFile *f, int first, int lib, int owner) {
         m->spec = cb + 12 + info_len;
         m->speclen = spec_len;
         m->cast_chunk = id;
+        if (info_len >= 16) m->info_flags = be32(info + 12);
         /* info: offset naar data, daar u16 aantal + offsets; item 1 = naam */
         if (info_len >= 20) {
             uint32_t doff = be32(info);
@@ -289,6 +290,7 @@ Sound *member_sound(CastLib *c, Member *m) {
             s->pcm[i] = bigend ? (int16_t)(data[2 * i] << 8 | data[2 * i + 1])
                                : (int16_t)(data[2 * i + 1] << 8 | data[2 * i]);
     }
+    s->loop = !(m->info_flags & 16);   /* "Loop" in het castvenster: achtergrondmuziek, DrumLoop */
     m->snd = s;
     return s;
 }

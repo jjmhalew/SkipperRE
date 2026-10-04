@@ -44,7 +44,11 @@ static void mix(int16_t *out, int frames) {
         Sound *s = v->s;
         for (int i = 0; i < frames; i++) {
             int k = (int)v->pos;
-            if (k >= s->frames) { v->playing = 0; break; }
+            if (k >= s->frames) {
+                if (!s->loop || s->frames <= 0) { v->playing = 0; break; }
+                v->pos -= s->frames;   /* herhalen */
+                k = (int)v->pos;
+            }
             int l, r;
             if (s->channels == 2) { l = s->pcm[2 * k]; r = s->pcm[2 * k + 1]; }
             else l = r = s->pcm[k];
@@ -192,7 +196,7 @@ void sound_stop(int ch) {
 int sound_busy(int ch) {
     if (ch < 1 || ch > NCH) return 0;
     /* zonder audio-apparaat (headless): bezig zolang de echte duur van het geluid */
-    if (!g_ok) return g_v[ch].playing && now_ms() - g_v[ch].start < g_v[ch].dur;
+    if (!g_ok) return g_v[ch].playing && (g_v[ch].s->loop || now_ms() - g_v[ch].start < g_v[ch].dur);
     return g_v[ch].playing;
 }
 
