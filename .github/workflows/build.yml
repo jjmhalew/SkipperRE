@@ -1,4 +1,4 @@
-# Builds skipper.exe (Windows, Zig), skipper (Linux, SDL2) and the Android APK on every push and pull request. No game data
+# Builds skipper.exe (Windows, build.bat with Zig), skipper (Linux, SDL2) and the Android APK on every push and pull request. No game data
 # is involved: the programs hold only the port's own code; each job runs the transition test (--transtest), which needs
 # no game files. A pushed tag v* also publishes a GitHub release with SkipperRE-<tag>-windows.zip (skipper.exe, README.md,
 # LICENSE), SkipperRE-<tag>-linux-x86_64.tar.gz (skipper, README.md, LICENSE) and SkipperRE-<tag>.apk.
@@ -22,11 +22,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Zig
-        run: pip install ziglang==0.16.0
-
+      # build.bat downloads Zig 0.16.0 itself (SHA-256 checked), as it does for players who build from source
       - name: Build
-        run: RELEASE=1 ./build.sh && ls -l out/skipper.exe
+        shell: cmd
+        run: build.bat
 
       - name: Test
         run: mkdir -p out/trans && out/skipper.exe --transtest out/trans && ls out/trans | wc -l

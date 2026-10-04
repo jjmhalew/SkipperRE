@@ -1,4 +1,4 @@
-/* Eén exe: tools/pack.py plakt de spelbestanden achter skipper.exe (Windows negeert alles na de
+/* Eén exe: tools/pack.c (make_standalone.bat) plakt de spelbestanden achter skipper.exe (Windows negeert alles na de
  * laatste sectie). Het spel ziet ze dan in de map van de exe staan: een pad onder die map dat niet
  * als echt bestand bestaat, wordt in het pakket opgezocht. Echte bestanden gaan altijd voor.
  *

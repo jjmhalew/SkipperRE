@@ -6,3 +6,5 @@ __pycache__/
 .claude/launch.json
 .claude/worktrees
 dist/
+SkipperRE-standalone.exe
+tools/zig/

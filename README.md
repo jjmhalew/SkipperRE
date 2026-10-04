@@ -65,8 +65,16 @@ pixels met alfa < 128 zijn ook doorzichtig. Opslagmap: `%APPDATA%\SkipperRE`, `~
 Android `Android/data/io.github.jjmhalew.skipperre/files`.
 
 ## Bouwen
-- **Windows**: `./build.sh` in Git Bash (C-compiler Zig: `pip install ziglang`), `RELEASE=1 ./build.sh` voor de
-  speelversie (geoptimaliseerd, zonder consolevenster) → `out/skipper.exe`.
+- **Windows** (10 of 11, vooraf niets te installeren): dubbelklik `build.bat` → `out\skipper.exe`. De C-compiler is
+  [Zig](https://ziglang.org): een `zig` op PATH of `pip install ziglang` wordt gebruikt als die er is, anders downloadt
+  `build.bat` eenmalig de officiële Zig 0.16.0 voor Windows (ongeveer 95 MB) naar `tools\zig` en controleert de
+  SHA-256. `build.bat dev` bouwt de ontwikkelversie `out\dev.exe` (log in de console, UBSan). In Git Bash kan ook
+  `./build.sh` (zie hieronder).
+- **Eén exe voor jezelf**: dubbelklik `make_standalone.bat` → `SkipperRE-standalone.exe` (ongeveer 165 MB), met
+  `skipper.exe` en **jouw** spelbestanden erin: draait zonder cd, image of `data`-map. De spelbestanden komen uit
+  `extract\`, `data\` of `%APPDATA%\SkipperRE\data` (een eerder uitgepakt image), of uit de map die je opgeeft, zoals
+  het cd-station: `make_standalone.bat D:\`. Hij bevat het spel zelf, dus alleen voor eigen gebruik: nooit delen of
+  uploaden.
 - **Linux**: `./build.sh` → `out/skipper` (Debian / Ubuntu: `sudo apt install build-essential libsdl2-dev`).
 - **Android**: `cd android` en `./gradlew assembleRelease` (of `assembleDebug`) → `android/app/build/outputs/apk/`.
   Nodig: Android SDK met NDK 27.2 en CMake 3.22 (Android Studio kan de map `android` ook openen). De build haalt
@@ -163,13 +171,13 @@ sh tools/regress.sh                          # regressietest: 11 minigames + bri
 Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
 
 ### Eén exe
-```bash
-RELEASE=1 ./build.sh                         # out/skipper.exe (met het icoon van de cd als extract/ er is)
-python tools/pack.py                         # -> dist/Skipper.exe (~140 MB), draait zonder cd of extract/
+```bat
+make_standalone.bat [map]                    :: = build.bat standalone -> SkipperRE-standalone.exe (~165 MB)
+out\pack.exe [exe] [datamap] [uit.exe]       :: alleen inpakken (tools\pack.c; build.bat standalone bouwt hem)
 ```
-`tools/pack.py` plakt de films, casts, video's en `start.dxr` (raw deflate, 195 → 140 MB) achter de exe;
-de engine ziet ze als bestanden in de map van de exe. Alleen voor eigen gebruik: de spelbestanden zijn
-auteursrechtelijk beschermd.
+`tools\pack.c` plakt de films, casts, video's en `start.dxr` (raw deflate, 195 → 162 MB) achter de exe;
+de engine ziet ze als bestanden in de map van de exe (`src/pack.c`). Alleen voor eigen gebruik: de spelbestanden
+zijn auteursrechtelijk beschermd.
 
 ### Eigen spellingboeken (spellingspel, MMB10)
 Het originele `STAVEDIT.EXE` is 16-bit en draait niet op Windows 11, maar het formaat is simpel. Zet in

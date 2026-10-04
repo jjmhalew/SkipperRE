@@ -104,8 +104,11 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       `Magnus.ico` on the disc (or `res/skipperre.ico`), version info from `res/skipperre.rc` (0.9.0).
 - [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 16 checks, 2-3 s with the virtual clock; same pictures
       on Windows and Linux)* (13 hotspots + walk/drag/mailbox/boss/bucket scenarios).
-- [x] **Single exe** (`tools/pack.py` → `dist/Skipper.exe`, ~140 MB): game files appended to the exe
-      (`src/pack.c`), icon as a resource. Regression sweep 15/15 against the packed exe from an empty folder.
+- [x] **Single exe** (`make_standalone.bat` → `tools/pack.c` → `SkipperRE-standalone.exe`, ~165 MB): game files
+      appended to the exe (`src/pack.c`), icon as a resource. Regression sweep 16/16 against the packed exe from an
+      empty folder.
+- [x] **build.bat**: Windows build without installing anything (Zig from PATH, pip, or downloaded once with SHA-256
+      check), like WoodyRE; CI's Windows job uses it.
 - [x] **File picker** when the game files are not found (Windows: open dialog; Linux: zenity/kdialog; Android: SAF).
 - [x] **Linux** build (SDL2, `src/host_sdl.c`, TTF text): regression 16/16 in WSL Ubuntu; window not seen yet.
 - [x] **Android** APK (`android/`): first start with the system file picker, touch buttons in the side bars;

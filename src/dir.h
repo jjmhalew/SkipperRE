@@ -380,7 +380,7 @@ int disc_make_start(const char *setup_exe, const char *dst);
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
 int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_out, int nbin);   /* gekozen image of map */
 int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen);
-/* pack.c: spelbestanden achter de exe (tools/pack.py) */
+/* pack.c: spelbestanden achter de exe (tools/pack.c) */
 int pack_open(const char *root);
 int vfs_exists(const char *path);
 uint8_t *vfs_load(const char *path, long *n);
