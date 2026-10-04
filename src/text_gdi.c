@@ -4,9 +4,11 @@
 #include "dir.h"
 #include <windows.h>
 
-/* img (w x h, 0xAARRGGBB) wordt wit met de tekst in kleur fc; caret = invoegstreep aan het eind */
-void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
+/* img (w x h, 0xAARRGGBB) wordt wit met de tekst in kleur fc; caret = invoegstreep aan het eind.
+ * Geeft de hoogte die de tekst bij breedte w nodig heeft; img NULL = alleen meten. */
+int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
     HDC dc = CreateCompatibleDC(NULL);
+    if (!img) h = 1;
     BITMAPINFO bi = {0};
     bi.bmiHeader.biSize = sizeof bi.bmiHeader;
     bi.bmiHeader.biWidth = w;
@@ -33,8 +35,10 @@ void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
         else txt[k++] = t->text[i];
     }
     txt[k] = 0;
-    DrawTextA(dc, txt, k, &rc, fmt);
-    if (caret) {
+    RECT need = {0, 0, w, 0};
+    DrawTextA(dc, k ? txt : "X", k ? k : 1, &need, fmt | DT_CALCRECT);   /* leeg veld: één regel hoog */
+    if (img) DrawTextA(dc, txt, k, &rc, fmt);
+    if (img && caret) {
         /* invoegpositie aan het eind van de laatste regel (links uitgelijnde naamvelden) */
         const char *last = strrchr(txt, '\n');
         last = last ? last + 1 : txt;
@@ -50,12 +54,15 @@ void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
     }
     free(txt);
     GdiFlush();
-    memcpy(img, bits, (size_t)w * h * 4);
-    for (int i = 0; i < w * h; i++) img[i] |= 0xff000000u;
+    if (img) {
+        memcpy(img, bits, (size_t)w * h * 4);
+        for (int i = 0; i < w * h; i++) img[i] |= 0xff000000u;
+    }
     SelectObject(dc, of);
     DeleteObject(f);
     SelectObject(dc, ob);
     DeleteObject(hb);
     DeleteDC(dc);
+    return need.bottom;
 }
 #endif

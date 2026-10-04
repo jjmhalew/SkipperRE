@@ -200,7 +200,7 @@ void sprite_rect(int ch, int *l, int *t, int *r, int *b) {
         }
     } else if (m && (m->type == MT_TEXT || m->type == MT_BUTTON)) {
         Text *tx = member_text(cl, m);
-        if (tx && !c->stretch) { w = tx->w; h = tx->h; }
+        if (tx && !c->stretch) { w = tx->w + text_frame(tx); h = tx->h + text_frame(tx); }
     } else if (m && m->type == MT_VIDEO) {
         int fw = m->rect_r - m->rect_l, fh = m->rect_b - m->rect_t;
         if (!c->stretch) { w = fw; h = fh; }

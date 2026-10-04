@@ -153,7 +153,13 @@ typedef struct Text {
     char font[64];
     int w, h, left, top;
     int dirty;
+    /* veldkader (D5): rand, marge en slagschaduw in pixels; boxType 0 = hoogte past zich aan de tekst aan */
+    int border, gutter, shadow, box_type;
+    uint32_t bg;        /* achtergrond, 0xRRGGBB */
 } Text;
+
+/* kader + marge + schaduw rond het tekstvlak: de sprite is zoveel breder en hoger dan t->w x t->h */
+static inline int text_frame(const Text *t) { return 2 * (t->border + t->gutter) + t->shadow; }
 
 struct Score;
 typedef struct Video Video;
@@ -174,13 +180,13 @@ typedef struct Member {
     int shape_type, shape_fore, shape_back, shape_filled, shape_line;
     int rect_l, rect_t, rect_r, rect_b;
     int purge;
+    uint32_t info_flags; /* vlaggen uit de info-kop; geluid: 16 = niet herhalen */
     char *file;         /* gekoppeld bestand (digitalVideo), zonder map */
     struct Video *video;
     int video_failed;
 } Member;
 
 typedef struct CastLib {
-    uint32_t info_flags; /* vlaggen uit de info-kop; geluid: 16 = niet herhalen */
     char name[64];
     DFile *f;
     int first, n;       /* nummers first .. first+n-1 */
@@ -371,7 +377,8 @@ void bmp_write(const char *path, const uint32_t *px, int w, int h);
 void texpack_init(int dump, int force_scale);   /* texpack.c: mods/textures inlezen; dump = --dumptex */
 int texpack_scale(void);                         /* render-schaal van het beeld (1..4) */
 const uint32_t *texpack_get(Bitmap *bm, const uint32_t *lut, const char *movie, int *w, int *h);
-void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret);   /* text_gdi.c / text_ttf.c */
+/* text_gdi.c / text_ttf.c: tekst in kleur fc op wit; geeft de hoogte die de tekst nodig heeft (img NULL: alleen meten) */
+int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret);
 uint32_t *stage_bitmap_argb(Bitmap *bm);
 void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t);
 void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s);   /* op schaal s */

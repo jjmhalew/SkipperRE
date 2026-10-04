@@ -71,8 +71,8 @@ static void draw_run(stbtt_fontinfo *f, float sc, const char *s, int n, float x,
     }
 }
 
-void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
-    for (int i = 0; i < w * h; i++) img[i] = 0xffffffffu;   /* wit = achtergrond */
+int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
+    if (img) for (int i = 0; i < w * h; i++) img[i] = 0xffffffffu;   /* wit = achtergrond */
     stbtt_fontinfo *f = pick(t->font, t->style);
     int size = t->font_size > 0 ? t->font_size : 12;
     float sc = stbtt_ScaleForMappingEmToPixels(f, (float)size);
@@ -102,8 +102,8 @@ void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
             while (n > 0 && p[n - 1] == ' ') n--;
             float lw = measure(f, sc, p, n);
             float x = t->align == 1 ? (w - lw) / 2 : t->align == -1 ? w - lw : 0;
-            draw_run(f, sc, p, n, x, y + ascent, img, w, h, fc);
-            if (t->style & 4) {   /* onderstreept */
+            if (img) draw_run(f, sc, p, n, x, y + ascent, img, w, h, fc);
+            if (img && (t->style & 4)) {   /* onderstreept */
                 int uy = y + ascent + 1;
                 for (int xx = (int)x; xx < (int)(x + lw) && uy < h; xx++) if (xx >= 0 && xx < w) img[uy * w + xx] = fc;
             }
@@ -117,9 +117,10 @@ void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
         s = e + 1;
         if (*e == '\r' && *s == '\n') s++;
     }
-    if (caret) {   /* invoegpositie aan het eind van de laatste regel */
+    if (img && caret) {   /* invoegpositie aan het eind van de laatste regel */
         int cx = (int)last_w + 1;
         for (int yy = last_y; yy < last_y + lh && yy < h; yy++) if (cx >= 0 && cx < w && yy >= 0) img[yy * w + cx] = fc;
     }
+    return y;
 }
 #endif

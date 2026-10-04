@@ -154,13 +154,36 @@ static TextCache *text_render(Text *t, int caret) {
         tc->t = t;
         t->dirty = 1;
     }
-    int w = t->w > 0 ? t->w : 1, h = t->h > 0 ? t->h : 1;
-    if (!t->dirty && tc->img && tc->w == w && tc->h == h && tc->caret == caret) return tc;
+    int w = t->w > 0 ? t->w : 1;
+    if (t->dirty && t->box_type == 0) {   /* "adjust to fit": de hoogte volgt de tekst (ondertitels op 18 pt) */
+        int need = text_raster(t, NULL, w, 0, 0, 0);
+        if (need > 0) t->h = need;
+    }
+    int h = t->h > 0 ? t->h : 1, fr = text_frame(t), W = w + fr, H = h + fr;
+    if (!t->dirty && tc->img && tc->w == W && tc->h == H && tc->caret == caret) return tc;
     tc->caret = caret;
     free(tc->img);
-    tc->w = w; tc->h = h;
-    tc->img = malloc(sizeof(uint32_t) * w * h);
-    text_raster(t, tc->img, w, h, color_of(t->fore), caret);
+    tc->w = W; tc->h = H;
+    tc->img = malloc(sizeof(uint32_t) * W * H);
+    uint32_t *in = fr ? malloc(sizeof(uint32_t) * w * h) : tc->img;
+    text_raster(t, in, w, h, color_of(t->fore), caret);
+    /* alfa in de cache: 0 = niets, 1 = achtergrond (valt weg bij doorzichtige inkt), 255 = tekst / rand / schaduw */
+    uint32_t bg = 0x01000000u | (t->bg & 0xffffff);
+    for (int i = 0; i < w * h; i++) in[i] = (in[i] & 0xffffff) == 0xffffff ? bg : in[i] | 0xff000000u;
+    if (fr) {   /* veldkader: rand in zwart, marge in de achtergrondkleur, slagschaduw rechtsonder */
+        int b = t->border, m = b + t->gutter, sh = t->shadow;
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                uint32_t p = 0;
+                if (x < W - sh && y < H - sh) {
+                    if (x < b || y < b || x >= W - sh - b || y >= H - sh - b) p = 0xff000000u;
+                    else if (x >= m && y >= m && x < m + w && y < m + h) p = in[(y - m) * w + x - m];
+                    else p = bg;
+                } else if (x >= sh && y >= sh) p = 0xff000000u;
+                tc->img[y * W + x] = p;
+            }
+        free(in);
+    }
     t->dirty = 0;
     return tc;
 }
@@ -176,8 +199,8 @@ static void draw_text(uint32_t *dst, int ox, int oy, int cw, int chh, Text *t, C
         uint32_t *row = row_of(dst, ox, oy, Y);
         for (int X = X0; X < X1; X++) {
             uint32_t p = src[X / s - l];
-            if (transparent && (p & 0xffffff) == 0xffffff) continue;
-            row[X] = p;
+            if (!(p >> 24) || (transparent && p >> 24 == 1)) continue;
+            row[X] = p | 0xff000000u;
         }
     }
 }

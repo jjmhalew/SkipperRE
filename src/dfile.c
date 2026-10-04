@@ -302,13 +302,15 @@ Text *member_text(CastLib *c, Member *m) {
     if (m->type != MT_TEXT && m->type != MT_BUTTON) return NULL;
     Text *t = calloc(1, sizeof *t);
     const uint8_t *s = m->spec;
-    t->align = 0; t->fore = 255; t->back = 0; t->font_size = 12;
+    t->align = 0; t->fore = 255; t->back = 0; t->font_size = 12; t->bg = 0xffffff;
     strcpy(t->font, "Arial");
     if (m->speclen >= 22) {
         t->align = (int16_t)be16(s + 4);
         t->top = (int16_t)be16(s + 14); t->left = (int16_t)be16(s + 16);
         t->h = (int16_t)be16(s + 18) - t->top; t->w = (int16_t)be16(s + 20) - t->left;
         t->back = 0;
+        t->border = s[0]; t->gutter = s[1]; t->shadow = s[2]; t->box_type = s[3];
+        t->bg = (uint32_t)s[6] << 16 | s[8] << 8 | s[10];   /* 16-bit RGB, hoge bytes */
     }
     int st = dfile_child(c->f, member_owner(c, m), FOURCC('S', 'T', 'X', 'T'));
     uint32_t sz;
