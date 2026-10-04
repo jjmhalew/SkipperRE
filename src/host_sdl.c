@@ -5,6 +5,7 @@
 #include "dir.h"
 #undef fopen
 #include <SDL.h>
+#include <math.h>
 #include <signal.h>
 #include <unistd.h>
 #ifdef __GLIBC__
@@ -17,8 +18,20 @@ static SDL_Window *g_win;
 static SDL_Renderer *g_ren;
 static SDL_Texture *g_tex;
 
+#ifdef __ANDROID__
+int android_dialog(const char *text, const char *b1, const char *b2, const char *b3);   /* android.c */
+int android_pick_data(char *out, int n);
+void touch_draw(SDL_Renderer *r);
+int touch_event(SDL_Event *e, SDL_Window *win, SDL_Renderer *r);
+#endif
+
 void host_message(const char *text, int warn) {
     fprintf(stderr, "%s\n", text);
+#ifdef __ANDROID__
+    (void)warn;
+    if (!g_headless) android_dialog(text, "OK", NULL, NULL);
+    return;
+#endif
     if (!g_headless)
         SDL_ShowSimpleMessageBox(warn ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION, "Skipper & Skeeto", text, g_win);
 }
@@ -43,9 +56,6 @@ void host_print(const uint32_t *px, int w, int h, int landscape, const char *nam
 }
 
 /* ------------------------------------------------------------------ bestandskiezer */
-#ifdef __ANDROID__
-int android_pick_data(char *out, int n);   /* android.c */
-#endif
 
 static int ask(const char *text, const char *yes, const char *no) {
     const SDL_MessageBoxButtonData b[2] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, yes}, {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, no}};
@@ -96,6 +106,27 @@ int host_pick_data(char *out, int n) {
 }
 
 /* ------------------------------------------------------------------ tonen */
+/* Het beeld staat in g_dst (renderer-pixels): zo groot mogelijk in 4:3 (stage_fit). Geen SDL_RenderSetLogicalSize:
+ * die schaalt ook aanraakposities naar het beeld en klemt ze erin, en dan zijn knoppen in de zwarte balken niet te raken. */
+static SDL_Rect g_dst = {0, 0, 640, 480};
+
+static void place(void) {
+    int ow, oh, l, t, w, h;
+    if (SDL_GetRendererOutputSize(g_ren, &ow, &oh) || ow <= 0 || oh <= 0) return;
+    stage_fit(ow, oh, &l, &t, &w, &h);
+    g_dst = (SDL_Rect){l, t, w, h};
+}
+
+/* vensterpunt (muis; vinger x venstergrootte) -> podiumcoördinaat */
+void host_sdl_to_stage(float wx, float wy, int *x, int *y) {
+    int ww, wh, ow, oh;
+    SDL_GetWindowSize(g_win, &ww, &wh);
+    SDL_GetRendererOutputSize(g_ren, &ow, &oh);
+    float px = ww > 0 ? wx * ow / ww : wx, py = wh > 0 ? wy * oh / wh : wy;
+    *x = (int)floorf((px - g_dst.x) * 640.0f / g_dst.w);
+    *y = (int)floorf((py - g_dst.y) * 480.0f / g_dst.h);
+}
+
 #ifdef __ANDROID__
 /* Android heeft geen muisaanwijzer: met een controller tekenen we de cursor van het spel zelf (of een pijl) */
 static void draw_soft_cursor(void) {
@@ -123,7 +154,8 @@ static void draw_soft_cursor(void) {
         free(img);
     }
     if (!tex) return;
-    SDL_Rect r = {P.mouse_x - thx, P.mouse_y - thy, tw, th};
+    SDL_Rect r = {g_dst.x + (P.mouse_x - thx) * g_dst.w / 640, g_dst.y + (P.mouse_y - thy) * g_dst.h / 480,
+                  tw * g_dst.w / 640, th * g_dst.h / 480};
     SDL_RenderCopy(g_ren, tex, NULL, &r);
 }
 #endif
@@ -143,7 +175,8 @@ void host_blit(const uint32_t *px, int w, int h) {
     SDL_UpdateTexture(g_tex, NULL, px, w * 4);
     SDL_SetRenderDrawColor(g_ren, 0, 0, 0, 255);
     SDL_RenderClear(g_ren);
-    SDL_RenderCopy(g_ren, g_tex, NULL, NULL);
+    place();
+    SDL_RenderCopy(g_ren, g_tex, NULL, &g_dst);
 #ifdef __ANDROID__
     if (pad_recent()) draw_soft_cursor();
     touch_draw(g_ren);
@@ -161,12 +194,11 @@ static SDL_Cursor *g_cur_arrow, *g_cur_wait, *g_cur_now;
 static SDL_Cursor *g_cur_cache[64];
 static int g_cur_key[64], g_cur_scale[64], g_ncur;
 
-static int cursor_scale(void) {
-    int w = 640, h = 480;
-    SDL_GetWindowSize(g_win, &w, &h);
-    int l, t, sw, sh;
-    stage_fit(w, h, &l, &t, &sw, &sh);
-    int s = (sw + 320) / 640;
+static int cursor_scale(void) {   /* in vensterpunten, zoals de systeemcursor */
+    int ww, wh, ow, oh;
+    SDL_GetWindowSize(g_win, &ww, &wh);
+    SDL_GetRendererOutputSize(g_ren, &ow, &oh);
+    int s = ow > 0 ? (g_dst.w * ww / ow + 320) / 640 : 1;
     return s < 1 ? 1 : s > 8 ? 8 : s;
 }
 
@@ -252,6 +284,9 @@ static unsigned g_devchanges;   /* een controller kwam of ging */
 void host_events(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
+#ifdef __ANDROID__
+        if (touch_event(&e, g_win, g_ren)) continue;   /* vingers: muis en knoppen (android.c) */
+#endif
         switch (e.type) {
         case SDL_QUIT: P.halted = 2; break;
         case SDL_CONTROLLERDEVICEADDED:
@@ -261,15 +296,15 @@ void host_events(void) {
                 if (g_shown) host_blit(g_shown, g_shown_w, g_shown_h);
             break;
         case SDL_MOUSEMOTION:
-            P.mouse_x = e.motion.x; P.mouse_y = e.motion.y;
+            host_sdl_to_stage((float)e.motion.x, (float)e.motion.y, &P.mouse_x, &P.mouse_y);
             break;
         case SDL_MOUSEBUTTONDOWN:
         case SDL_MOUSEBUTTONUP: {
             int down = e.type == SDL_MOUSEBUTTONDOWN, right = e.button.button == SDL_BUTTON_RIGHT;
             if (e.button.button != SDL_BUTTON_LEFT && !right) break;
-            P.mouse_x = e.button.x; P.mouse_y = e.button.y;
+            host_sdl_to_stage((float)e.button.x, (float)e.button.y, &P.mouse_x, &P.mouse_y);
             if (!right) P.mouse_down = down;
-            input_push(down ? 1 : 2, e.button.x, e.button.y, right, 0);
+            input_push(down ? 1 : 2, P.mouse_x, P.mouse_y, right, 0);
             break;
         }
         case SDL_KEYDOWN:
@@ -298,9 +333,11 @@ void host_events(void) {
     }
     if (g_win && pad_input((SDL_GetWindowFlags(g_win) & SDL_WINDOW_INPUT_FOCUS) != 0, g_devchanges)) {
 #ifndef __ANDROID__   /* de pad verplaatste de aanwijzer: de echte muis erheen (Android tekent hem zelf, zie host_blit) */
-        int wx, wy;
-        SDL_RenderLogicalToWindow(g_ren, P.mouse_x + 0.5f, P.mouse_y + 0.5f, &wx, &wy);
-        SDL_WarpMouseInWindow(g_win, wx, wy);
+        int ww, wh, ow, oh;
+        SDL_GetWindowSize(g_win, &ww, &wh);
+        SDL_GetRendererOutputSize(g_ren, &ow, &oh);
+        float px = g_dst.x + (P.mouse_x + 0.5f) * g_dst.w / 640, py = g_dst.y + (P.mouse_y + 0.5f) * g_dst.h / 480;
+        SDL_WarpMouseInWindow(g_win, ow > 0 ? (int)(px * ww / ow) : (int)px, oh > 0 ? (int)(py * wh / oh) : (int)py);
 #endif
     }
     if (g_win) update_cursor();
@@ -315,6 +352,7 @@ int host_open(int scale, int fullscreen) {
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");   /* Android: vingers zelf afhandelen */
     if (SDL_Init(SDL_INIT_VIDEO)) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     if (scale <= 0) {   /* grootste gehele schaal die op het scherm past */
         SDL_Rect r;
@@ -333,7 +371,6 @@ int host_open(int scale, int fullscreen) {
     g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!g_ren) g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_SOFTWARE);
     if (!g_ren) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
-    SDL_RenderSetLogicalSize(g_ren, 640, 480);   /* muiscoördinaten komen ook in 640x480 */
     g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 640, 480);
     if (fullscreen) toggle_fullscreen();
     g_cur_arrow = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);

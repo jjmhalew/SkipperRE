@@ -5,7 +5,7 @@
 #   Android:            zie android/ (Gradle).
 # OUT=... kiest het doelbestand, OPT=... de optimalisatie, DEFS=... extra opties.
 cd "$(dirname "$0")"
-if [ "$RELEASE" = 1 ]; then OPT=${OPT:--O2 -fno-sanitize=undefined}; fi
+if [ "$RELEASE" = 1 ]; then OPT=${OPT:--O2 -fno-sanitize=undefined}; GUI=1; fi
 OPT=${OPT:--O1}
 SRC="src/main.c src/host_win.c src/host_sdl.c src/plat_win.c src/plat_posix.c src/ini.c src/text_gdi.c src/text_ttf.c
      src/stb_impl.c src/dfile.c src/lingo.c src/builtins.c src/player.c src/stage.c src/xobj.c src/sound.c src/video.c
@@ -21,14 +21,13 @@ Linux*)
   ;;
 *)
   OUT=${OUT:-out/skipper.exe}
-  # icoon van de cd in de exe (als de spelbestanden in extract/ staan)
+  # versie (res/skipperre.rc) en icoon: dat van de cd als de spelbestanden in extract/ staan, anders res/skipperre.ico
   ICON=${ICON:-extract/Magnus.ico}
-  RC=
-  if [ -f "$ICON" ]; then
-    cp "$ICON" out/skipper.ico
-    echo '1 ICON "skipper.ico"' > out/skipper.rc
-    RC=out/skipper.rc
-  fi
+  [ -f "$ICON" ] || ICON=res/skipperre.ico
+  cp "$ICON" out/skipper.ico
+  { cat res/skipperre.rc; echo '1 ICON "skipper.ico"'; } > out/skipper.rc
+  RC=out/skipper.rc
+  [ "$GUI" = 1 ] && DEFS="$DEFS -Wl,--subsystem,windows"   # geen consolevenster naast het spel
   # shellcheck disable=SC2086
   python -m ziglang cc -std=c99 $OPT -g -fno-omit-frame-pointer -Wall -Wno-unused-function -o "$OUT" $SRC $RC $DEFS \
     -lgdi32 -luser32 -lwinmm -ldbghelp -lcomdlg32 -lsetupapi -lhid

@@ -2,6 +2,7 @@
  * host_win.c (Windows) of host_sdl.c (Linux, Android).
  *
  *   skipper.exe [datamap] [--movie start] [--bin SKIPPER_1.BIN] [--scale 2] [--fullscreen] [--trace]
+ *               [--intro | --nointro]  (logo en intro: altijd / nooit; standaard overgeslagen als er een opgeslagen spel is)
  *               [--dumptex] [--hd N]   (texture packs: bitmaps wegschrijven / beeldschaal kiezen, zie texpack.c)
  *               [--shot N out.bmp]   (headless: N frames draaien, stage opslaan, stoppen)
  *               [--click x y F]      (headless: klik op (x,y) vlak voor frame F)
@@ -201,8 +202,57 @@ void host_pump(void) {
     if (player_drag_update() || P.update_needed) stage_present();   /* scripts die in een lus wachten, zien toch hun updateStage */
 }
 
+/* ------------------------------------------------------------------ opening overslaan */
+/* Is er al een opgeslagen spel, dan slaat de start het Ivanoff-logo en de intro over: hij doet wat een klik tijdens het
+ * logo doet (start.dxr zet daarvoor mouseDownScript op 'go to "SkipIntro"', nadat het de instellingen gelezen heeft).
+ * --intro speelt ze toch altijd, --nointro slaat ze altijd over. */
+void lingo_do(const char *s);
+static int g_skip = -1;   /* -1 alleen met een opgeslagen spel, 0 nooit, 1 altijd */
+
+static int saves_exist(void) {   /* zoals SavedGamesExists in Magnus.dxr: een naam in MAGNUS.INI [Saved games] */
+    char ini[PLAT_PATH], key[16], v[64];
+    snprintf(ini, sizeof ini, "%s\\MAGNUS.INI", P.save_dir);
+    for (int i = 1; i <= 16; i++) {
+        snprintf(key, sizeof key, "GAME%d", i);
+        if (ini_get(ini, "Saved games", key, "", v, sizeof v) > 0) return 1;
+    }
+    return 0;
+}
+
+/* De klik-sprongen, in volgorde: start.dxr 'go to "SkipIntro"' (logo -> intro), Intro.dxr 'go to "Title"' (tekenfilm ->
+ * titel) en 'go to "IntroEnd"' (titel -> het spel). Elke sprong één keer, zodra het spel hem als klik-actie zet. */
+static void skip_intro(void) {
+    static const char *steps[] = {"SkipIntro", "Title", "IntroEnd"};
+    static int state, done[3];   /* state: 0 nog niet bekeken, 1 overslaan, 2 klaar */
+    if (state == 2 || !P.mv) return;
+    if (_stricmp(P.mv->name, "start") && _stricmp(P.mv->name, "INTRO")) { state = 2; return; }
+    Datum d = P.mouse_down_script;
+    if (d.t != T_STR) return;
+    int k = -1;
+    for (int i = 0; i < 3; i++)
+        if (!done[i] && strstr(d.u.s->s, steps[i])) k = i;
+    if (k < 0) return;
+    if (!state) {
+        state = g_skip == 1 || (g_skip < 0 && saves_exist()) ? 1 : 2;
+        if (state == 2) return;
+        fprintf(stderr, "[start] logo en intro overgeslagen\n");
+    }
+    char go[64];
+    snprintf(go, sizeof go, "%s", d.u.s->s);
+    done[k] = 1;
+    lingo_do(go);
+    if (k == 2) state = 2;
+}
+
 /* ------------------------------------------------------------------ start */
+#ifdef __ANDROID__
+void android_init(void);
+#endif
+
 int main(int argc, char **argv) {
+#ifdef __ANDROID__
+    android_init();   /* stderr naar skipper.log in de app-map */
+#endif
     host_crash_init();
     const char *data = "extract", *movie = "start", *shot = NULL;
     int shot_frames = 0, scale = 0, fullscreen = 0, dumptex = 0, hd = 0;
@@ -218,6 +268,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--fullscreen")) fullscreen = 1;
         else if (!strcmp(argv[i], "--dumptex")) dumptex = 1;
+        else if (!strcmp(argv[i], "--intro")) g_skip = 0;
+        else if (!strcmp(argv[i], "--nointro")) g_skip = 1;
         else if (!strcmp(argv[i], "--hd") && i + 1 < argc) hd = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--trace")) vm_trace = 1;
         else if (!strcmp(argv[i], "--shot") && i + 2 < argc) { shot_frames = atoi(argv[++i]); shot = argv[++i]; g_headless = 1; }
@@ -347,6 +399,7 @@ int main(int argc, char **argv) {
                 }
             DBG_CHECK();
             int ms = player_tick();
+            skip_intro();
             if (g_headless) player_idle();   /* headless: één idle per frame */
             DBG_CHECK();
             stage_present();

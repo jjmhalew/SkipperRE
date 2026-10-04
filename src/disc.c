@@ -372,12 +372,24 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
     } else snprintf(bin, sizeof bin, "%s", image);   /* .iso (of een geopend bestand zonder naam): 2048-byte sectoren */
     im.f = fopen(bin, "rb");
     if (!im.f) return 0;
-    if (!im.raw) {   /* zonder CUE: ruwe sectoren herkennen aan het synchronisatiepatroon, datatrack vooraan */
+    uint8_t pvd[2048];
+    if (!im.raw && !(img_sector(&im, 16, pvd) && pvd[0] == 1 && !memcmp(pvd + 1, "CD001", 5))) {
+        /* zonder CUE en geen ISO: ruwe sectoren van 2352 bytes. Op deze cd (Enhanced CD) staan de muzieknummers
+         * vooraan en de datatrack achteraan: de eerste sector met het synchronisatiepatroon waar 16 sectoren verder
+         * een ISO9660-volumebeschrijving staat */
         static const uint8_t sync[12] = {0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
         uint8_t h[16];
-        if (fread(h, 1, 16, im.f) == 16 && !memcmp(h, sync, 12)) { im.raw = 1; im.hdr = h[15] == 2 ? 24 : 16; }
+        for (uint32_t lba = 0; !im.raw && !_fseeki64(im.f, (long long)lba * 2352, SEEK_SET) && fread(h, 1, 16, im.f) == 16; lba++) {
+            if (memcmp(h, sync, 12) || (h[15] != 1 && h[15] != 2)) continue;
+            Img t = im;
+            t.raw = 1;
+            t.hdr = h[15] == 2 ? 24 : 16;
+            for (uint32_t k = 0; k < 600 && !im.raw; k++)   /* voorloop (pregap) van de track overslaan */
+                if (img_sector(&t, lba + k + 16, pvd) && pvd[0] == 1 && !memcmp(pvd + 1, "CD001", 5)) { im = t; start = lba + k; }
+            if (!im.raw) lba += 600;
+        }
+        if (im.raw) fprintf(stderr, "[disc] datatrack op sector %u (zonder CUE)\n", start);
     }
-    uint8_t pvd[2048];
     int ok = 0;
     if (img_sector(&im, start + 16, pvd) && pvd[0] == 1 && !memcmp(pvd + 1, "CD001", 5)) {
         fprintf(stderr, "[disc] datatrack uitpakken uit %s naar %s ...\n", bin, dst);
