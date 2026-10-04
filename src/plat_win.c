@@ -65,7 +65,7 @@ int plat_cd_dirs(char out[][PLAT_PATH], int max) {
 }
 
 void plat_sleep(int ms) { Sleep(ms); }
-uint32_t now_ms(void) { return GetTickCount(); }
+uint32_t plat_ms(void) { return GetTickCount(); }
 
 static CRITICAL_SECTION g_cs;
 static INIT_ONCE g_once = INIT_ONCE_STATIC_INIT;

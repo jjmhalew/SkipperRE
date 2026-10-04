@@ -263,9 +263,16 @@ static Datum bi_integer(Datum *a, int n) {
     return d_int(d_toint(x));
 }
 static Datum bi_float(Datum *a, int n) { return d_float(d_tofloat(ARG(0))); }
+/* random(n): eigen generator (xorshift32), zodat elk platform dezelfde reeks geeft. Headless (tests) altijd vanaf
+ * hetzelfde zaad, anders vanaf de klok (zoals Director: elke keer anders). */
+static uint32_t g_rng;
 static Datum bi_random(Datum *a, int n) {
     int m = d_toint(ARG(0));
-    return d_int(m > 0 ? rand() % m + 1 : 1);
+    if (!g_rng) g_rng = g_headless ? 0x2545f491u : (plat_ms() * 2654435761u) | 1;
+    g_rng ^= g_rng << 13;
+    g_rng ^= g_rng >> 17;
+    g_rng ^= g_rng << 5;
+    return d_int(m > 0 ? (int)(g_rng % (uint32_t)m) + 1 : 1);
 }
 static Datum bi_charToNum(Datum *a, int n) {
     Str *s = d_asstr(ARG(0));

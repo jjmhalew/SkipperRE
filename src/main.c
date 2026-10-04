@@ -23,6 +23,12 @@ void player_idle(void);
 
 static uint32_t *g_prev;       /* laatst getoonde stage (voor transities) */
 
+/* Headless (tests) loopt de tijd virtueel: elk frame schuift de klok de frameduur op, en elke keer dat iets de tijd
+ * opvraagt 1 ms (zodat een script dat op de klok wacht altijd verder komt). Zo geeft een testrun op elke machine en
+ * elk platform hetzelfde, onafhankelijk van hoe snel hij draait. */
+static uint32_t g_vclock = 1000000;
+uint32_t now_ms(void) { return g_headless ? g_vclock++ : plat_ms(); }
+
 void host_alert(const char *msg) {
     fprintf(stderr, "[alert] %s\n", msg);
     if (!g_headless) host_message(msg, 0);
@@ -340,13 +346,14 @@ int main(int argc, char **argv) {
             }
             next = t + (ms > 0 ? ms : 1);
             if (shot && frames >= shot_frames) break;
-            if (g_headless && ms > 0) plat_sleep(ms / 4);   /* headless: sneller dan echt, maar timers lopen door */
+            if (g_headless && ms > 0) g_vclock += (uint32_t)ms;   /* headless: virtuele tijd, zo snel als het kan */
         } else {
             player_idle();
             if (P.update_needed) stage_present();
             plat_sleep(1);
         }
     }
+    fprintf(stderr, "[einde] film %s frame %d na %d frames\n", P.mv ? P.mv->name : "?", P.frame, frames);
     if (dump) {
         void globals_dump(FILE *);
         globals_dump(stderr);

@@ -380,6 +380,7 @@ char *vfs_real(const char *path, char *out, int n);
 void host_print(const uint32_t *px, int w, int h, int landscape, const char *name);
 int player_drag_update(void);   /* moveableSprite volgt de muis; 1 als hij verschoof */
 int player_focus_field(void);   /* kanaal van het editable veld met toetsenbordfocus in CP, of 0 */
+int player_text_wanted(void);   /* ergens een editable veld (schermtoetsenbord) */
 void player_key(int code, int ch, int down);
 void player_update_stage(void);
 Datum player_the(int name);

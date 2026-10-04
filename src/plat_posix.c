@@ -198,7 +198,7 @@ void plat_sleep(int ms) {
     nanosleep(&ts, NULL);
 }
 
-uint32_t now_ms(void) {
+uint32_t plat_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint32_t)((uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u);

@@ -599,6 +599,17 @@ int player_focus_field(void) {
     return 0;
 }
 
+/* staat er ergens (podium of een open venster) een editable veld? (Android: schermtoetsenbord) */
+int player_text_wanted(void) {
+    for (int ch = 1; ch <= NCHAN; ch++)
+        if (field_editable(&P, ch)) return 1;
+    for (Window *w = P.windows; w; w = w->next)
+        if (w->open && w->visible && w->ctx && w->ctx->mv)
+            for (int ch = 1; ch <= NCHAN; ch++)
+                if (field_editable(w->ctx, ch)) return 1;
+    return 0;
+}
+
 static void field_type(int fch, int code, int c) {
     Channel *chn = &CP->ch[fch];
     CastLib *cl;

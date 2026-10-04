@@ -1,6 +1,6 @@
 /* text_gdi.c - tekstmembers tekenen met GDI (Windows), zoals de Director-projector dat deed: de lettersoort uit de
  * fontmap van de film, zonder anti-aliasing. Elders: text_ttf.c. */
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(TEXT_TTF)
 #include "dir.h"
 #include <windows.h>
 

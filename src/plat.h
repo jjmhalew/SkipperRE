@@ -32,7 +32,8 @@ int plat_cd_dirs(char out[][PLAT_PATH], int max);    /* cd-stations en gemounte 
 void plat_sleep(int ms);
 void plat_lock(void);                                /* één globale mutex (mixer <-> engine) */
 void plat_unlock(void);
-uint32_t now_ms(void);
+uint32_t plat_ms(void);                              /* milliseconden, monotoon */
+uint32_t now_ms(void);                               /* main.c: plat_ms, of de virtuele klok van een headless run */
 
 /* ini.c: Windows-INI-bestanden zoals GetPrivateProfileString/WritePrivateProfileString (ook op Windows zelf) */
 int ini_get(const char *file, const char *sect, const char *key, const char *def, char *out, int n);

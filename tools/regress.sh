@@ -1,14 +1,17 @@
 #!/bin/sh
 # Regressietest (headless): alle hotspots in Skipper's kamer + een paar spelscenario's.
-# Draait met een eigen, lege APPDATA zodat echte spelposities niet geraakt worden.
-#   tools/regress.sh [exe]      (standaard out/skipper.exe)
+# Draait met een eigen, lege opslagmap (APPDATA / XDG_DATA_HOME) zodat echte spelposities niet geraakt worden.
+# Headless loopt de tijd virtueel, dus de uitkomst is op elke machine en elk platform gelijk.
+#   tools/regress.sh [exe]      (standaard out/skipper.exe, op Linux out/skipper)
 # Elke regel: naam, OK/FOUT, film + frame aan het eind. Screenshots in out/regress/.
-EXE=${1:-out/skipper.exe}
+case "$(uname -s)" in Linux*) DEF=out/skipper ;; *) DEF=out/skipper.exe ;; esac
+EXE=${1:-$DEF}
 DATA=${DATA:-extract}   # DATA=- : niets opgeven (bijv. een exe met ingepakte spelbestanden)
 OUTD=out/regress
 rm -rf "$OUTD"; mkdir -p "$OUTD/appdata"
 APPDATA=$(cygpath -w "$PWD/$OUTD/appdata" 2>/dev/null || echo "$PWD/$OUTD/appdata")
-export APPDATA
+XDG_DATA_HOME="$PWD/$OUTD/appdata"
+export APPDATA XDG_DATA_HOME
 FAIL=0
 
 # check naam verwacht-film-of-global  args...
