@@ -433,3 +433,7 @@ void host_message(const char *text, int warn);
 int host_pick_data(char *out, int n); /* cd-image of map kiezen; 0 = geannuleerd */
 void host_crash_init(void);
 int ld_save_game(int is_load);        /* slotkeuze; 0 = annuleren */
+
+/* padinput.c: controller als muis en sneltoetsen */
+int pad_input(int focused, unsigned devchanges);   /* 1 = aanwijzer verplaatst */
+int pad_recent(void);                             /* de pad is de laatste 4 s gebruikt */

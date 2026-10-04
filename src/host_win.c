@@ -11,6 +11,7 @@
 static HWND g_hwnd;
 static RECT g_dst = {0, 0, 1280, 960};   /* waar het podium in het venster staat (beeldverhouding 4:3) */
 static int g_fullscreen;
+static unsigned g_devchanges;   /* WM_DEVICECHANGE-teller: een pad kwam of ging */
 static WINDOWPLACEMENT g_wp = {sizeof(WINDOWPLACEMENT)};
 
 void host_message(const char *text, int warn) {
@@ -338,6 +339,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     to_stage(lp, &x, &y);
     switch (msg) {
     case WM_CLOSE: P.halted = 2; return 0;
+    case WM_DEVICECHANGE: g_devchanges++; break;
     case WM_SIZE: layout(); InvalidateRect(h, NULL, FALSE); return 0;
     case WM_DPICHANGED: {   /* naar een monitor met een andere schaal: de voorgestelde grootte overnemen */
         RECT *r = (RECT *)lp;
@@ -381,11 +383,19 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     return DefWindowProcA(h, msg, wp, lp);
 }
 
+
 void host_events(void) {
     MSG m;
     while (PeekMessageA(&m, NULL, 0, 0, PM_REMOVE)) {
         TranslateMessage(&m);
         DispatchMessageA(&m);
+    }
+    if (g_hwnd && pad_input(GetForegroundWindow() == g_hwnd, g_devchanges)) {
+        /* de pad verplaatste de aanwijzer: de echte muis erheen (midden van de podiumpixel) */
+        int w = g_dst.right - g_dst.left, h = g_dst.bottom - g_dst.top;
+        POINT pt = {g_dst.left + (P.mouse_x * 2 + 1) * w / 1280, g_dst.top + (P.mouse_y * 2 + 1) * h / 960};
+        ClientToScreen(g_hwnd, &pt);
+        SetCursorPos(pt.x, pt.y);
     }
 }
 

@@ -96,12 +96,48 @@ int host_pick_data(char *out, int n) {
 }
 
 /* ------------------------------------------------------------------ tonen */
+#ifdef __ANDROID__
+/* Android heeft geen muisaanwijzer: met een controller tekenen we de cursor van het spel zelf (of een pijl) */
+static void draw_soft_cursor(void) {
+    static SDL_Texture *tex;
+    static int key = -1, tw, th, thx, thy;
+    Datum c = cursor_wanted();
+    int k = c.t == T_LIST && c.u.l->n >= 1 ? d_toint(c.u.l->v[0]) : c.t == T_INT && c.u.i == 200 ? -2 : 0;
+    if (k == -2) return;
+    if (k != key) {
+        if (tex) SDL_DestroyTexture(tex);
+        tex = NULL;
+        key = k;
+        uint32_t *img = k ? cursor_image(c, 1, &tw, &th, &thx, &thy) : NULL;
+        if (!img) {   /* pijl van 11x17 */
+            static const char *arrow[17] = {"X", "XX", "X.X", "X..X", "X...X", "X....X", "X.....X", "X......X", "X.......X",
+                                            "X........X", "X.....XXXXX", "X..X..X", "X.X X..X", "XX  X..X", "X    X..X", "     X..X", "      XX"};
+            tw = 11; th = 17; thx = thy = 0;
+            img = calloc(tw * th, 4);
+            for (int y = 0; y < th; y++)
+                for (int x = 0; arrow[y][x]; x++)
+                    img[y * tw + x] = arrow[y][x] == 'X' ? 0xff000000u : arrow[y][x] == '.' ? 0xffffffffu : 0;
+        }
+        tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, tw, th);
+        if (tex) { SDL_UpdateTexture(tex, NULL, img, tw * 4); SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND); }
+        free(img);
+    }
+    if (!tex) return;
+    SDL_Rect r = {P.mouse_x - thx, P.mouse_y - thy, tw, th};
+    SDL_RenderCopy(g_ren, tex, NULL, &r);
+}
+#endif
+
 void host_blit(const uint32_t *px) {
     if (g_headless || !g_ren) return;
     SDL_UpdateTexture(g_tex, NULL, px, 640 * 4);
     SDL_SetRenderDrawColor(g_ren, 0, 0, 0, 255);
     SDL_RenderClear(g_ren);
     SDL_RenderCopy(g_ren, g_tex, NULL, NULL);
+#ifdef __ANDROID__
+    if (pad_recent()) draw_soft_cursor();
+    touch_draw(g_ren);
+#endif
     SDL_RenderPresent(g_ren);
 }
 
@@ -201,12 +237,15 @@ static int to_cp1252(int u) {
 
 /* ------------------------------------------------------------------ events */
 static int g_text_on = -1;
+static unsigned g_devchanges;   /* een controller kwam of ging */
 
 void host_events(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         switch (e.type) {
-        case SDL_QUIT: fprintf(stderr, "[sdl] quit\n"); P.halted = 2; break;
+        case SDL_QUIT: P.halted = 2; break;
+        case SDL_CONTROLLERDEVICEADDED:
+        case SDL_CONTROLLERDEVICEREMOVED: g_devchanges++; break;
         case SDL_WINDOWEVENT:
             if (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || e.window.event == SDL_WINDOWEVENT_EXPOSED)
                 if (stage_px) host_blit(stage_px);
@@ -246,6 +285,13 @@ void host_events(void) {
             }
             break;
         }
+    }
+    if (g_win && pad_input((SDL_GetWindowFlags(g_win) & SDL_WINDOW_INPUT_FOCUS) != 0, g_devchanges)) {
+#ifndef __ANDROID__   /* de pad verplaatste de aanwijzer: de echte muis erheen (Android tekent hem zelf, zie host_blit) */
+        int wx, wy;
+        SDL_RenderLogicalToWindow(g_ren, P.mouse_x + 0.5f, P.mouse_y + 0.5f, &wx, &wy);
+        SDL_WarpMouseInWindow(g_win, wx, wy);
+#endif
     }
     if (g_win) update_cursor();
 #ifdef __ANDROID__

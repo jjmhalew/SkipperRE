@@ -9,7 +9,7 @@ if [ "$RELEASE" = 1 ]; then OPT=${OPT:--O2 -fno-sanitize=undefined}; fi
 OPT=${OPT:--O1}
 SRC="src/main.c src/host_win.c src/host_sdl.c src/plat_win.c src/plat_posix.c src/ini.c src/text_gdi.c src/text_ttf.c
      src/stb_impl.c src/dfile.c src/lingo.c src/builtins.c src/player.c src/stage.c src/xobj.c src/sound.c src/video.c
-     src/trans.c src/disc.c src/pack.c src/dbgheap.c"
+     src/trans.c src/disc.c src/pack.c src/dbgheap.c src/pad.c src/pad_sdl.c src/padinput.c"
 mkdir -p out
 case "$(uname -s)" in
 Linux*)
@@ -31,6 +31,6 @@ Linux*)
   fi
   # shellcheck disable=SC2086
   python -m ziglang cc -std=c99 $OPT -g -fno-omit-frame-pointer -Wall -Wno-unused-function -o "$OUT" $SRC $RC $DEFS \
-    -lgdi32 -luser32 -lwinmm -ldbghelp -lcomdlg32
+    -lgdi32 -luser32 -lwinmm -ldbghelp -lcomdlg32 -lsetupapi -lhid
   ;;
 esac
