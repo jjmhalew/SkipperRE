@@ -1,35 +1,67 @@
-"""Draws the app icon of SkipperRE (own artwork, not the game's): a red cap on blue, for Android's launcher.
+"""Renders the app icon of SkipperRE (own artwork, not the game's) from res/icon.svg.
 
-    python tools/mkicon.py      -> android/app/src/main/res/mipmap-*/ic_launcher.png
+    python tools/mkicon.py [preview.png]
+        -> res/icon.png (256), res/skipperre.ico (16-256), android/app/src/main/res/mipmap-*/ic_launcher.png
+
+The SVG is drawn by a headless Edge or Chrome (whichever is installed) at 1024 px and scaled down with Pillow. The parts
+marked class="detail" (mosquito, clouds, the sun's glow) are left out at 32 px and below, where they would only be noise.
+With an argument it also writes a preview sheet of all sizes.
 """
-import os
-from PIL import Image, ImageDraw
+import os, subprocess, sys, tempfile
+from PIL import Image
 
-ROOT = os.path.join(os.path.dirname(__file__), '..')
-SIZES = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
-
-
-def icon(n):
-    k = 8   # draw large, scale down for smooth edges
-    s = n * k
-    im = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-    d = ImageDraw.Draw(im)
-    d.rounded_rectangle([s * 0.04, s * 0.04, s * 0.96, s * 0.96], radius=s * 0.2, fill=(46, 150, 210, 255))
-    d.ellipse([s * 0.10, s * 0.55, s * 0.90, s * 1.15], fill=(255, 205, 80, 255))          # yellow ground
-    d.pieslice([s * 0.18, s * 0.22, s * 0.78, s * 0.86], 180, 360, fill=(224, 24, 16, 255))  # the cap's dome
-    d.rounded_rectangle([s * 0.50, s * 0.50, s * 0.92, s * 0.60], radius=s * 0.05, fill=(190, 12, 8, 255))  # brim
-    d.ellipse([s * 0.44, s * 0.18, s * 0.52, s * 0.26], fill=(190, 12, 8, 255))           # button on top
-    d.arc([s * 0.26, s * 0.30, s * 0.70, s * 0.80], 200, 330, fill=(255, 255, 255, 255), width=int(s * 0.03))
-    mask = Image.new('L', (s, s), 0)   # everything inside the rounded square
-    ImageDraw.Draw(mask).rounded_rectangle([s * 0.04, s * 0.04, s * 0.96, s * 0.96], radius=s * 0.2, fill=255)
-    out = Image.new('RGBA', (s, s), (0, 0, 0, 0))
-    out.paste(im, (0, 0), mask)
-    return out.resize((n, n), Image.LANCZOS)
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+SVG = os.path.join(ROOT, 'res', 'icon.svg')
+MIPMAPS = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
+ICO = [16, 24, 32, 48, 64, 128, 256]
+SMALL = 32   # this size and below: the simple version
+BROWSERS = [r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
+            r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
+            r'C:\Program Files\Google\Chrome\Application\chrome.exe',
+            '/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome', '/usr/bin/microsoft-edge']
 
 
-for name, n in SIZES.items():
-    d = os.path.join(ROOT, 'android', 'app', 'src', 'main', 'res', 'mipmap-' + name)
-    os.makedirs(d, exist_ok=True)
-    icon(n).save(os.path.join(d, 'ic_launcher.png'))
-icon(256).save(os.path.join(ROOT, 'res', 'icon.png'))
-icon(256).save(os.path.join(ROOT, 'res', 'skipperre.ico'), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
+def render(svg_text, tmp, name):
+    """the SVG as a 1024x1024 RGBA image"""
+    browser = next((b for b in BROWSERS if os.path.isfile(b)), None)
+    if not browser:
+        sys.exit('mkicon: needs Edge or Chrome to draw the SVG')
+    src, png = os.path.join(tmp, name + '.svg'), os.path.join(tmp, name + '.png')
+    with open(src, 'w', encoding='utf-8') as f:
+        f.write(svg_text)
+    subprocess.run([browser, '--headless=new', '--disable-gpu', '--hide-scrollbars', '--default-background-color=00000000',
+                    '--window-size=1024,1024', '--screenshot=' + png, 'file:///' + src.replace('\\', '/')],
+                   check=True, capture_output=True)
+    return Image.open(png).convert('RGBA')
+
+
+def main():
+    svg = open(SVG, encoding='utf-8').read()
+    with tempfile.TemporaryDirectory() as tmp:
+        big = render(svg, tmp, 'full')
+        small = render(svg.replace('class="detail"', 'display="none"'), tmp, 'small')
+    size = lambda n: (small if n <= SMALL else big).resize((n, n), Image.LANCZOS)
+
+    for name, n in MIPMAPS.items():
+        d = os.path.join(ROOT, 'android', 'app', 'src', 'main', 'res', 'mipmap-' + name)
+        os.makedirs(d, exist_ok=True)
+        size(n).save(os.path.join(d, 'ic_launcher.png'), optimize=True)
+    size(256).save(os.path.join(ROOT, 'res', 'icon.png'), optimize=True)
+    imgs = [size(n) for n in ICO]
+    imgs[-1].save(os.path.join(ROOT, 'res', 'skipperre.ico'), sizes=[(n, n) for n in ICO], append_images=imgs[:-1])
+
+    if len(sys.argv) > 1:   # preview: large, then every icon size, on light and dark
+        w = 420 + sum(n + 16 for n in ICO[:-1])
+        sheet = Image.new('RGBA', (w, 860), (240, 240, 240, 255))
+        sheet.paste((32, 32, 36, 255), (0, 430, w, 860))
+        for y in (10, 440):
+            sheet.alpha_composite(big.resize((400, 400), Image.LANCZOS), (10, y))
+            x = 430
+            for n in reversed(ICO[:-1]):
+                sheet.alpha_composite(size(n), (x, y))
+                x += n + 16
+        sheet.save(sys.argv[1])
+
+
+if __name__ == '__main__':
+    main()
