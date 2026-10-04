@@ -162,6 +162,7 @@ Bitmap *member_bitmap(CastLib *c, Member *m) {
     int bd = dfile_child(c->f, member_owner(c, m), FOURCC('B', 'I', 'T', 'D'));
     const uint8_t *s = m->spec;
     Bitmap *b = calloc(1, sizeof *b);
+    b->name = m->name;
     uint16_t flags = be16(s);
     b->pitch = flags & 0x0fff;
     int top = (int16_t)be16(s + 2), left = (int16_t)be16(s + 4);

@@ -128,9 +128,19 @@ static void draw_soft_cursor(void) {
 }
 #endif
 
-void host_blit(const uint32_t *px) {
+static const uint32_t *g_shown;   /* laatst getoonde beeld (venster blootgelegd) */
+static int g_shown_w, g_shown_h, g_tex_w = 640, g_tex_h = 480;
+
+void host_blit(const uint32_t *px, int w, int h) {
     if (g_headless || !g_ren) return;
-    SDL_UpdateTexture(g_tex, NULL, px, 640 * 4);
+    g_shown = px; g_shown_w = w; g_shown_h = h;
+    if (w != g_tex_w || h != g_tex_h) {   /* texture pack in HD: grotere texture, lineair verkleinen */
+        SDL_DestroyTexture(g_tex);
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, w > 640 ? "1" : "0");
+        g_tex = SDL_CreateTexture(g_ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+        g_tex_w = w; g_tex_h = h;
+    }
+    SDL_UpdateTexture(g_tex, NULL, px, w * 4);
     SDL_SetRenderDrawColor(g_ren, 0, 0, 0, 255);
     SDL_RenderClear(g_ren);
     SDL_RenderCopy(g_ren, g_tex, NULL, NULL);
@@ -248,7 +258,7 @@ void host_events(void) {
         case SDL_CONTROLLERDEVICEREMOVED: g_devchanges++; break;
         case SDL_WINDOWEVENT:
             if (e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED || e.window.event == SDL_WINDOWEVENT_EXPOSED)
-                if (stage_px) host_blit(stage_px);
+                if (g_shown) host_blit(g_shown, g_shown_w, g_shown_h);
             break;
         case SDL_MOUSEMOTION:
             P.mouse_x = e.motion.x; P.mouse_y = e.motion.y;

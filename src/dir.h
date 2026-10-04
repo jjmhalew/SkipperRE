@@ -135,6 +135,10 @@ typedef struct Bitmap {
     int left, top, reg_x, reg_y;   /* reg relatief t.o.v. linksboven */
     int clut_lib, clut;
     uint8_t *px;    /* w*h indices (8 bpp), 1 bpp omgezet naar 0/255 */
+    const char *name;               /* membernaam (texpack: --dumptex) */
+    uint64_t hash;                  /* texpack.c */
+    uint32_t *hd;                   /* vervangend plaatje uit een texture pack (ARGB), of NULL */
+    int hd_w, hd_h, hd_state;       /* hd_state: 0 nog niet gezocht, 1 gezocht */
 } Bitmap;
 
 typedef struct Sound {
@@ -363,9 +367,13 @@ const uint32_t *video_frame(Video *v, int n);  /* 0xAARRGGBB, w*h */
 Sound *video_audio(Video *v);
 Video *member_video(Member *m);   /* laadt het gekoppelde AVI-bestand lui */
 void bmp_write(const char *path, const uint32_t *px, int w, int h);
+void texpack_init(int dump, int force_scale);   /* texpack.c: mods/textures inlezen; dump = --dumptex */
+int texpack_scale(void);                         /* render-schaal van het beeld (1..4) */
+const uint32_t *texpack_get(Bitmap *bm, const uint32_t *lut, const char *movie, int *w, int *h);
 void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret);   /* text_gdi.c / text_ttf.c */
 uint32_t *stage_bitmap_argb(Bitmap *bm);
 void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t);
+void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s);   /* op schaal s */
 int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintOMatic-document is */
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
 int disc_make_start(const char *setup_exe, const char *dst);
@@ -389,6 +397,7 @@ void builtins_register(void);
 /* stage */
 extern uint32_t *stage_px;     /* 640x480 BGRA */
 void stage_compose(void);
+uint32_t *stage_compose_hd(void);   /* beeld op de schaal van het texture pack, of NULL */
 int sprite_hit(int ch, int x, int y);
 int sprite_mouse_target(int x, int y);   /* bovenste sprite die de muis opvangt */
 void sprite_rect(int ch, int *l, int *t, int *r, int *b);
@@ -428,7 +437,7 @@ uint32_t *cursor_image(Datum c, int scale, int *w, int *h, int *hx, int *hy);   
 /* host_win.c (Win32) / host_sdl.c (SDL2): venster, invoer, dialogen */
 int host_open(int scale, int fullscreen);
 void host_events(void);        /* OS-berichten -> input_push */
-void host_blit(const uint32_t *px);   /* 640x480 tonen */
+void host_blit(const uint32_t *px, int w, int h);   /* beeld tonen: 640x480, of groter met een texture pack */
 void host_message(const char *text, int warn);
 int host_pick_data(char *out, int n); /* cd-image of map kiezen; 0 = geannuleerd */
 void host_crash_init(void);

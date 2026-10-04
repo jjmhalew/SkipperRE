@@ -199,16 +199,21 @@ int host_pick_data(char *out, int n) {
 }
 
 /* ------------------------------------------------------------------ tonen */
-void host_blit(const uint32_t *px) {
+static const uint32_t *g_shown;   /* laatst getoonde beeld (WM_PAINT) */
+static int g_shown_w, g_shown_h;
+
+void host_blit(const uint32_t *px, int w, int h) {
     if (g_headless || !g_hwnd) return;
+    g_shown = px; g_shown_w = w; g_shown_h = h;
     HDC dc = GetDC(g_hwnd);
     BITMAPINFO bi = {0};
     bi.bmiHeader.biSize = sizeof bi.bmiHeader;
-    bi.bmiHeader.biWidth = 640;
-    bi.bmiHeader.biHeight = -480;
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;
     bi.bmiHeader.biPlanes = 1;
     bi.bmiHeader.biBitCount = 32;
-    SetStretchBltMode(dc, COLORONCOLOR);
+    if (g_dst.right - g_dst.left < w) { SetStretchBltMode(dc, HALFTONE); SetBrushOrgEx(dc, 0, 0, NULL); }   /* HD-beeld verkleinen */
+    else SetStretchBltMode(dc, COLORONCOLOR);
     RECT cr;
     GetClientRect(g_hwnd, &cr);
     /* zwarte randen rond het podium (venster met andere verhouding, volledig scherm) */
@@ -216,7 +221,7 @@ void host_blit(const uint32_t *px) {
     if (g_dst.bottom < cr.bottom) PatBlt(dc, 0, g_dst.bottom, cr.right, cr.bottom - g_dst.bottom, BLACKNESS);
     if (g_dst.left > 0) PatBlt(dc, 0, g_dst.top, g_dst.left, g_dst.bottom - g_dst.top, BLACKNESS);
     if (g_dst.right < cr.right) PatBlt(dc, g_dst.right, g_dst.top, cr.right - g_dst.right, g_dst.bottom - g_dst.top, BLACKNESS);
-    StretchDIBits(dc, g_dst.left, g_dst.top, g_dst.right - g_dst.left, g_dst.bottom - g_dst.top, 0, 0, 640, 480, px, &bi,
+    StretchDIBits(dc, g_dst.left, g_dst.top, g_dst.right - g_dst.left, g_dst.bottom - g_dst.top, 0, 0, w, h, px, &bi,
                   DIB_RGB_COLORS, SRCCOPY);
     ReleaseDC(g_hwnd, dc);
 }
@@ -361,7 +366,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
     case WM_SYSCHAR:
         if (wp == VK_RETURN) return 0;   /* geen piep na Alt+Enter */
         break;
-    case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); EndPaint(h, &ps); if (stage_px) host_blit(stage_px); return 0; }
+    case WM_PAINT: { PAINTSTRUCT ps; BeginPaint(h, &ps); EndPaint(h, &ps); if (g_shown) host_blit(g_shown, g_shown_w, g_shown_h); return 0; }
     case WM_MOUSEMOVE: P.mouse_x = x; P.mouse_y = y; return 0;
     case WM_LBUTTONDOWN: SetCapture(h); P.mouse_x = x; P.mouse_y = y; P.mouse_down = 1; input_push(1, x, y, 0, 0); return 0;
     case WM_LBUTTONUP: ReleaseCapture(); P.mouse_x = x; P.mouse_y = y; P.mouse_down = 0; input_push(2, x, y, 0, 0); return 0;

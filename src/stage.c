@@ -1,22 +1,44 @@
 /* Stagecompositie: sprites (met inks) naar een 32-bit buffer via het huidige 8-bit palet.
- * Director tekent kanaal 1 onderaan, 48 bovenaan; MIAW-vensters komen daar bovenop. */
+ * Director tekent kanaal 1 onderaan, 48 bovenaan; MIAW-vensters komen daar bovenop.
+ *
+ * Alles wordt in podiumcoördinaten (640x480) gerekend en op schaal g_s getekend: 1 voor stage_px (het spel, tests,
+ * screenshots), 2..4 voor stage_hd_px als een texture pack grotere plaatjes heeft (texpack.c). Een vervangen bitmap
+ * levert de kleuren; welke pixels doorzichtig zijn bepaalt altijd de originele bitmap. */
 #include "dir.h"
 #include <stdlib.h>
 #include <string.h>
 
-
 #define SW 640
 #define SH 480
-uint32_t *stage_px;
+uint32_t *stage_px, *stage_hd_px;
 extern Player *CP;
 
 void score_parse_ext(Score *sc, const uint8_t *b, uint32_t sz);
 
 static uint32_t g_lut[256];
+static int g_s = 1, g_stride = SW;   /* schaal en regellengte van de buffer waarin nu getekend wordt */
+static int g_fading;                 /* paletovergang bezig: vervangen plaatjes meekleuren */
+static uint16_t g_fade[256][3];      /* per index: huidige kleur / kleur zonder overgang (8.8) */
 
 static void build_lut(void) {
     for (int i = 0; i < 256; i++)
         g_lut[i] = 0xff000000u | (uint32_t)P.pal[i][0] << 16 | (uint32_t)P.pal[i][1] << 8 | P.pal[i][2];
+    /* tijdens een paletovergang: naar zwart/wit (vlak doel) telt het palet van vóór de overgang als 'echt', anders het doel */
+    g_fading = P.pal_fade_left > 0;
+    if (!g_fading) return;
+    int flat = 1;
+    for (int i = 1; i < 256 && flat; i++)
+        for (int k = 0; k < 3; k++) if (P.pal_target[i][k] != P.pal_target[0][k]) flat = 0;
+    for (int i = 0; i < 256; i++)
+        for (int k = 0; k < 3; k++) {
+            int ref = flat ? P.pal_from[i][k] : P.pal_target[i][k], cur = P.pal[i][k];
+            g_fade[i][k] = (uint16_t)(ref ? (cur * 256 / ref > 1024 ? 1024 : cur * 256 / ref) : 256);
+        }
+}
+
+static inline uint32_t faded(uint32_t c, int v) {
+    int r = (int)(c >> 16 & 255) * g_fade[v][0] >> 8, g = (int)(c >> 8 & 255) * g_fade[v][1] >> 8, b = (int)(c & 255) * g_fade[v][2] >> 8;
+    return 0xff000000u | (uint32_t)(r > 255 ? 255 : r) << 16 | (uint32_t)(g > 255 ? 255 : g) << 8 | (uint32_t)(b > 255 ? 255 : b);
 }
 
 /* matte: wit (index 0) dat met de rand verbonden is wordt transparant; per bitmap gecachet */
@@ -67,35 +89,48 @@ static inline uint32_t mix(uint32_t d, uint32_t s, int ink, int blend) {
     return 0xff000000u | (uint32_t)r << 16 | (uint32_t)g << 8 | (uint32_t)b;
 }
 
+/* rij Y (in schaalpixels) van de buffer, met venster-offset (ox, oy) in podiumpixels */
+static inline uint32_t *row_of(uint32_t *dst, int ox, int oy, int y) { return dst + (size_t)(oy * g_s + y) * g_stride + ox * g_s; }
+
 static void draw_bitmap(uint32_t *dst, int ox, int oy, int cw, int ch_, Bitmap *bm, Channel *c,
                         int l, int t, int r, int b) {
-    int w = r - l, h = b - t;
+    int w = r - l, h = b - t, s = g_s;
     if (w <= 0 || h <= 0 || !bm->w || !bm->h) return;
     const uint8_t *mm = c->ink == 8 ? matte_of(bm) : NULL;
     int ink = c->ink;
     int blend = c->blend ? c->blend : 100;
     if (ink == 32 && c->blend == 0) blend = 100;
-    for (int y = t < 0 ? 0 : t; y < b && y < ch_; y++) {
-        int sy = (y - t) * bm->h / h;
-        uint32_t *row = dst + (oy + y) * SW + ox;
-        for (int x = l < 0 ? 0 : l; x < r && x < cw; x++) {
-            int sx = (x - l) * bm->w / w;
+    int hw = 0, hh = 0;
+    const uint32_t *hd = bm->bpp == 1 ? NULL : texpack_get(bm, g_lut, CP->mv ? CP->mv->name : "", &hw, &hh);
+    int L = l * s, T = t * s, WS = w * s, HS = h * s;
+    int X0 = (l < 0 ? 0 : l) * s, X1 = (r < cw ? r : cw) * s, Y1 = (b < ch_ ? b : ch_) * s;
+    for (int Y = (t < 0 ? 0 : t) * s; Y < Y1; Y++) {
+        int sy = (Y - T) * bm->h / HS;
+        const uint32_t *hrow = hd ? hd + (size_t)((Y - T) * hh / HS) * hw : NULL;
+        uint32_t *row = row_of(dst, ox, oy, Y);
+        for (int X = X0; X < X1; X++) {
+            int sx = (X - L) * bm->w / WS;
             int i = sy * bm->w + sx;
             uint8_t v = bm->px[i];
             if (bm->bpp == 1) {
                 /* 1-bit: voorgrond = foreColor, achtergrond = backColor */
                 if (ink == 36 || ink == 1 || ink == 8) { if (!v) continue; }
                 v = v ? (uint8_t)c->fore : (uint8_t)c->back;
-                row[x] = g_lut[v];
+                row[X] = g_lut[v];
                 continue;
             }
             if (mm && !mm[i]) continue;
             if (ink == 36 && v == c->back) continue;
             if (ink == 1 && v == 0) continue;
             if (ink == 9 && v == 0) continue;
-            uint32_t s = g_lut[v];
-            if (ink == 0 || ink == 8 || ink == 36 || ink == 1 || ink == 9) row[x] = s;
-            else row[x] = mix(row[x], s, ink, blend);
+            uint32_t sc = g_lut[v];
+            if (hrow) {   /* texture pack: kleur uit de vervanging */
+                uint32_t p = hrow[(X - L) * hw / WS];
+                if (p >> 24 < 128) continue;
+                sc = g_fading ? faded(p, v) : p | 0xff000000u;
+            }
+            if (ink == 0 || ink == 8 || ink == 36 || ink == 1 || ink == 9) row[X] = sc;
+            else row[X] = mix(row[X], sc, ink, blend);
         }
     }
 }
@@ -133,16 +168,16 @@ static TextCache *text_render(Text *t, int caret) {
 static void draw_text(uint32_t *dst, int ox, int oy, int cw, int chh, Text *t, Channel *c, int l, int tp, int caret) {
     TextCache *tc = text_render(t, caret);
     if (!tc) return;
-    int transparent = c->ink == 36 || c->ink == 8 || c->ink == 1;
-    for (int y = 0; y < tc->h; y++) {
-        int dy = tp + y;
-        if (dy < 0 || dy >= chh) continue;
-        for (int x = 0; x < tc->w; x++) {
-            int dx = l + x;
-            if (dx < 0 || dx >= cw) continue;
-            uint32_t s = tc->img[y * tc->w + x];
-            if (transparent && (s & 0xffffff) == 0xffffff) continue;
-            dst[(oy + dy) * SW + ox + dx] = s;
+    int transparent = c->ink == 36 || c->ink == 8 || c->ink == 1, s = g_s;
+    int Y0 = (tp < 0 ? 0 : tp) * s, Y1 = (tp + tc->h < chh ? tp + tc->h : chh) * s;
+    int X0 = (l < 0 ? 0 : l) * s, X1 = (l + tc->w < cw ? l + tc->w : cw) * s;
+    for (int Y = Y0; Y < Y1; Y++) {
+        const uint32_t *src = tc->img + (size_t)(Y / s - tp) * tc->w;
+        uint32_t *row = row_of(dst, ox, oy, Y);
+        for (int X = X0; X < X1; X++) {
+            uint32_t p = src[X / s - l];
+            if (transparent && (p & 0xffffff) == 0xffffff) continue;
+            row[X] = p;
         }
     }
 }
@@ -185,7 +220,7 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
     Player *save = CP;
     CP = ctx;
     int fch = ctx->mv ? player_focus_field() : 0;
-    int blink = (now_ms() / 500) & 1;
+    int blink = (now_ms() / 500) & 1, s = g_s;
     for (int ch = 1; ch <= NCHAN; ch++) {
         Channel *c = &ctx->ch[ch];
         if (!c->visible || !c->member || !ctx->mv || c->killed) continue;
@@ -212,12 +247,13 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
             if ((c->ink == 36 || c->ink == 1) && (c->fore & 255) == (c->back & 255)) break;
             uint32_t col = g_lut[c->fore & 255];
             int filled = m->shape_filled;
-            for (int y = t < 0 ? 0 : t; y < b && y < chh; y++)
-                for (int x = l < 0 ? 0 : l; x < r && x < cw; x++) {
-                    if (!filled && y != t && y != b - 1 && x != l && x != r - 1) continue;
-                    uint32_t *p = &dst[(oy + y) * SW + ox + x];
-                    *p = c->ink == 32 ? mix(*p, col, 32, c->blend ? c->blend : 100) : col;
+            for (int Y = (t < 0 ? 0 : t) * s; Y < (b < chh ? b : chh) * s; Y++) {
+                uint32_t *row = row_of(dst, ox, oy, Y);
+                for (int X = (l < 0 ? 0 : l) * s; X < (r < cw ? r : cw) * s; X++) {
+                    if (!filled && Y >= (t + 1) * s && Y < (b - 1) * s && X >= (l + 1) * s && X < (r - 1) * s) continue;
+                    row[X] = c->ink == 32 ? mix(row[X], col, 32, c->blend ? c->blend : 100) : col;
                 }
+            }
             break;
         }
         case MT_FILMLOOP:
@@ -227,10 +263,11 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
             int vw, vh;
             const uint32_t *px = chan_video_frame(c, &vw, &vh);
             if (!px || r <= l || b <= t) break;
-            for (int y = t < 0 ? 0 : t; y < b && y < chh; y++) {
-                const uint32_t *src = px + (size_t)((y - t) * vh / (b - t)) * vw;
-                for (int x = l < 0 ? 0 : l; x < r && x < cw; x++)
-                    dst[(oy + y) * SW + ox + x] = src[(x - l) * vw / (r - l)];
+            int WS = (r - l) * s, HS = (b - t) * s;
+            for (int Y = (t < 0 ? 0 : t) * s; Y < (b < chh ? b : chh) * s; Y++) {
+                const uint32_t *src = px + (size_t)((Y - t * s) * vh / HS) * vw;
+                uint32_t *row = row_of(dst, ox, oy, Y);
+                for (int X = (l < 0 ? 0 : l) * s; X < (r < cw ? r : cw) * s; X++) row[X] = src[(X - l * s) * vw / WS];
             }
             break;
         }
@@ -239,22 +276,41 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
     CP = save;
 }
 
-void stage_compose(void) {
-    if (!stage_px) stage_px = calloc(SW * SH, 4);
-    build_lut();
-    g_loop_tick++;
+static void compose(uint32_t *dst, int s) {
+    g_s = s;
+    g_stride = SW * s;
     uint32_t bg = g_lut[P.stage_color & 255];
-    for (int i = 0; i < SW * SH; i++) stage_px[i] = bg;
-    draw_channels(stage_px, 0, 0, SW, SH, &P);
+    for (size_t i = 0, n = (size_t)SW * SH * s * s; i < n; i++) dst[i] = bg;
+    draw_channels(dst, 0, 0, SW, SH, &P);
     for (Window *w = P.windows; w; w = w->next) {
         if (!w->open || !w->visible || !w->ctx) continue;
         int ww = w->r - w->l, wh = w->b - w->t;
         if (w->l < 0 || w->t < 0 || w->l + ww > SW || w->t + wh > SH) continue;
         uint32_t wbg = g_lut[w->ctx->mv ? w->ctx->mv->stage_color & 255 : 0];
-        for (int y = 0; y < wh; y++)
-            for (int x = 0; x < ww; x++) stage_px[(w->t + y) * SW + w->l + x] = wbg;
-        draw_channels(stage_px, w->l, w->t, ww, wh, w->ctx);
+        for (int y = 0; y < wh * s; y++) {
+            uint32_t *row = row_of(dst, w->l, w->t, y);
+            for (int x = 0; x < ww * s; x++) row[x] = wbg;
+        }
+        draw_channels(dst, w->l, w->t, ww, wh, w->ctx);
     }
+    g_s = 1;
+    g_stride = SW;
+}
+
+void stage_compose(void) {
+    if (!stage_px) stage_px = calloc(SW * SH, 4);
+    build_lut();
+    g_loop_tick++;
+    compose(stage_px, 1);
+}
+
+/* het beeld voor het scherm op de schaal van het texture pack (na stage_compose); NULL als dat 1 is */
+uint32_t *stage_compose_hd(void) {
+    int s = texpack_scale();
+    if (s <= 1) return NULL;
+    if (!stage_hd_px) stage_hd_px = calloc((size_t)SW * SH * s * s, 4);
+    compose(stage_hd_px, s);
+    return stage_hd_px;
 }
 
 void bmp_write(const char *path, const uint32_t *px, int w, int hgt) {

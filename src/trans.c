@@ -32,35 +32,37 @@ static int dir_of(int type, int *dx, int *dy) {
     return 0;
 }
 
-void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t) {
+/* scale s: from/to/out zijn (640 s) x (480 s); de maskers worden op podiumpixels bepaald, schuiven op schaalpixels */
+void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s) {
     if (t < 0) t = 0;
     if (t > 1) t = 1;
     if (chunk < 1) chunk = 1;
-    int dx = 0, dy = 0;
+    if (s < 1) s = 1;
+    int dx = 0, dy = 0, SWS = W * s, SHS = H * s;
     if (dir_of(type, &dx, &dy)) {
-        int ox = qstep(t * W, chunk), oy = qstep(t * H, chunk);   /* afgelegde afstand */
-        for (int y = 0; y < H; y++)
-            for (int x = 0; x < W; x++) {
+        int ox = qstep(t * W, chunk) * s, oy = qstep(t * H, chunk) * s;   /* afgelegde afstand */
+        for (int y = 0; y < SHS; y++)
+            for (int x = 0; x < SWS; x++) {
                 uint32_t p;
                 if (type <= 14) {            /* push: oud schuift weg, nieuw komt er direct achteraan */
                     int sx = x - dx * ox, sy = y - dy * oy;
-                    if (sx >= 0 && sx < W && sy >= 0 && sy < H) p = from[sy * W + sx];
-                    else p = to[(sy + dy * H) * W + (sx + dx * W)];
+                    if (sx >= 0 && sx < SWS && sy >= 0 && sy < SHS) p = from[sy * SWS + sx];
+                    else p = to[(sy + dy * SHS) * SWS + (sx + dx * SWS)];
                 } else if (type <= 22) {     /* reveal: oud schuift weg over het nieuwe */
                     int sx = x - dx * ox, sy = y - dy * oy;
-                    p = sx >= 0 && sx < W && sy >= 0 && sy < H ? from[sy * W + sx] : to[y * W + x];
+                    p = sx >= 0 && sx < SWS && sy >= 0 && sy < SHS ? from[sy * SWS + sx] : to[y * SWS + x];
                 } else {                     /* cover: nieuw schuift erover */
-                    int sx = x + dx * (W - ox), sy = y + dy * (H - oy);
-                    p = sx >= 0 && sx < W && sy >= 0 && sy < H ? to[sy * W + sx] : from[y * W + x];
+                    int sx = x + dx * (SWS - ox), sy = y + dy * (SHS - oy);
+                    p = sx >= 0 && sx < SWS && sy >= 0 && sy < SHS ? to[sy * SWS + sx] : from[y * SWS + x];
                 }
-                out[y * W + x] = p;
+                out[y * SWS + x] = p;
             }
         return;
     }
     int bw = chunk < 2 ? 8 : chunk;          /* blokgrootte voor boxy/strips/blinds */
-    for (int y = 0; y < H; y++)
-        for (int x = 0; x < W; x++) {
-            int show;
+    for (int Y = 0; Y < SHS; Y++)
+        for (int X = 0; X < SWS; X++) {
+            int show, x = X / s, y = Y / s;
             double cx = fabs(x + 0.5 - W / 2.0) / (W / 2.0), cy = fabs(y + 0.5 - H / 2.0) / (H / 2.0);
             switch (type) {
             case 1: show = x < qstep(t * W, chunk); break;              /* wipe right */
@@ -112,6 +114,10 @@ void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int ty
             }
             default: show = rnd01(x, y) < t; break;
             }
-            out[y * W + x] = show ? to[y * W + x] : from[y * W + x];
+            out[Y * SWS + X] = show ? to[Y * SWS + X] : from[Y * SWS + X];
         }
+}
+
+void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t) {
+    trans_frame_s(out, from, to, type, chunk, t, 1);
 }

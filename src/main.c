@@ -2,6 +2,7 @@
  * host_win.c (Windows) of host_sdl.c (Linux, Android).
  *
  *   skipper.exe [datamap] [--movie start] [--bin SKIPPER_1.BIN] [--scale 2] [--fullscreen] [--trace]
+ *               [--dumptex] [--hd N]   (texture packs: bitmaps wegschrijven / beeldschaal kiezen, zie texpack.c)
  *               [--shot N out.bmp]   (headless: N frames draaien, stage opslaan, stoppen)
  *               [--click x y F]      (headless: klik op (x,y) vlak voor frame F)
  *               [--drag x1 y1 x2 y2 F] (headless: slepen van (x1,y1) naar (x2,y2) vlak voor frame F)
@@ -139,29 +140,38 @@ static void drain_input(void) {
 
 /* ------------------------------------------------------------------ tonen */
 /* Director-transities (codes 1..52, zie trans.c), live in het venster */
-static void transition(const uint32_t *from, const uint32_t *to, int type, int dur, int chunk) {
+static void transition(const uint32_t *from, const uint32_t *to, int type, int dur, int chunk, int s) {
     if (g_headless || dur <= 0) return;
-    static uint32_t tmp[640 * 480];
+    static uint32_t *tmp;
+    static int tmp_s;
+    if (tmp_s != s) { free(tmp); tmp = malloc((size_t)640 * 480 * s * s * 4); tmp_s = s; }
     uint32_t t0 = now_ms();
     for (;;) {
         double t = (double)(now_ms() - t0) / dur;
         if (t >= 1) break;
-        trans_frame(tmp, from, to, type, chunk, t);
-        host_blit(tmp);
+        trans_frame_s(tmp, from, to, type, chunk, t, s);
+        host_blit(tmp, 640 * s, 480 * s);
         host_events();
         plat_sleep(10);
     }
 }
 
+/* het beeld tonen: stage_px (640x480), of met een HD texture pack het beeld op schaal s */
 void stage_present(void) {
     stage_compose();
-    if (!g_prev) g_prev = calloc(640 * 480, 4);
+    uint32_t *hd = g_headless ? NULL : stage_compose_hd();
+    int s = hd ? texpack_scale() : 1;
+    const uint32_t *shown = hd ? hd : stage_px;
+    size_t n = (size_t)640 * 480 * s * s;
+    static int prev_s;
+    if (prev_s != s) { free(g_prev); g_prev = NULL; prev_s = s; }
+    if (!g_prev) g_prev = calloc(n, 4);
     if (P.trans_pending) {
         P.trans_pending = 0;
-        transition(g_prev, stage_px, P.trans_type, P.trans_dur > 2000 ? 2000 : P.trans_dur, P.trans_chunk);
+        transition(g_prev, shown, P.trans_type, P.trans_dur > 2000 ? 2000 : P.trans_dur, P.trans_chunk, s);
     }
-    host_blit(stage_px);
-    memcpy(g_prev, stage_px, 640 * 480 * 4);
+    host_blit(shown, 640 * s, 480 * s);
+    memcpy(g_prev, shown, n * 4);
     P.update_needed = 0;
 }
 
@@ -195,7 +205,7 @@ void host_pump(void) {
 int main(int argc, char **argv) {
     host_crash_init();
     const char *data = "extract", *movie = "start", *shot = NULL;
-    int shot_frames = 0, scale = 0, fullscreen = 0;
+    int shot_frames = 0, scale = 0, fullscreen = 0, dumptex = 0, hd = 0;
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
     int drags[16][5], ndrags = 0;
     int keys[64][3], nkeys = 0;
@@ -207,6 +217,8 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--bin") && i + 1 < argc) snprintf(bin, sizeof bin, "%s", argv[++i]);
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--fullscreen")) fullscreen = 1;
+        else if (!strcmp(argv[i], "--dumptex")) dumptex = 1;
+        else if (!strcmp(argv[i], "--hd") && i + 1 < argc) hd = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--trace")) vm_trace = 1;
         else if (!strcmp(argv[i], "--shot") && i + 2 < argc) { shot_frames = atoi(argv[++i]); shot = argv[++i]; g_headless = 1; }
         else if (!strcmp(argv[i], "--click") && i + 3 < argc && nclicks < 64) {
@@ -279,6 +291,7 @@ int main(int argc, char **argv) {
     }
     player_init(full);
     setup_save_dir();
+    texpack_init(dumptex, hd);
     /* de opstartfilm zit alleen in de projector in SETUP.EXE: eenmalig naar de opslagmap halen */
     char sd[PLAT_PATH], sd2[PLAT_PATH], setup[PLAT_PATH];
     snprintf(sd, sizeof sd, "%s\\start.dxr", full);
@@ -382,6 +395,12 @@ int main(int argc, char **argv) {
     if (shot) {
         stage_compose();
         stage_screenshot(shot);
+        uint32_t *hdpx = stage_compose_hd();   /* texture pack in HD: ook dat beeld (<shot>.hd.bmp) */
+        if (hdpx) {
+            char fn[PLAT_PATH];
+            snprintf(fn, sizeof fn, "%s.hd.bmp", shot);
+            bmp_write(fn, hdpx, 640 * texpack_scale(), 480 * texpack_scale());
+        }
         fprintf(stderr, "frame %d van %s -> %s\n", P.frame, P.mv ? P.mv->name : "?", shot);
     }
     return 0;
