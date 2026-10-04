@@ -1,8 +1,8 @@
 // SkipperRE - version resource of skipper.exe. The version here is also the APK's (android/app/build.gradle) and a release
 // tag must match it (.github/workflows/build.yml): v1.2.3 = "1.2.3".
 1 VERSIONINFO
-FILEVERSION 0,9,1,0
-PRODUCTVERSION 0,9,1,0
+FILEVERSION 0,9,2,0
+PRODUCTVERSION 0,9,2,0
 FILEOS 0x40004
 FILETYPE 0x1
 BEGIN
@@ -12,12 +12,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "SkipperRE"
       VALUE "FileDescription", "SkipperRE - Skipper & Skeeto in Pretpark"
-      VALUE "FileVersion", "0.9.1"
+      VALUE "FileVersion", "0.9.2"
       VALUE "InternalName", "skipper"
       VALUE "LegalCopyright", "GPL-3.0-or-later; the game and its data belong to their owners"
       VALUE "OriginalFilename", "skipper.exe"
       VALUE "ProductName", "SkipperRE"
-      VALUE "ProductVersion", "0.9.1"
+      VALUE "ProductVersion", "0.9.2"
     END
   END
   BLOCK "VarFileInfo"
