@@ -3,8 +3,12 @@
 #include "dir.h"
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
 #include <mmsystem.h>
+#else
+#include <SDL.h>
+#endif
 
 #define RATE 44100
 #define NBUF 4
@@ -14,10 +18,11 @@
 
 typedef struct Voice { Sound *s; double pos, step; int playing; uint32_t start, dur; } Voice;
 static Voice g_v[NCH + 2];
-static CRITICAL_SECTION g_cs;
+#ifdef _WIN32
 static HWAVEOUT g_wo;
 static WAVEHDR g_hdr[NBUF];
 static int16_t g_buf[NBUF][BUFFRAMES * 2];
+#endif
 static int g_gain = 256;
 static int g_ok;
 int sound_headless;
@@ -32,7 +37,7 @@ static long g_cd_pos, g_cd_end;                       /* in bytes */
 static void mix(int16_t *out, int frames) {
     static int32_t acc[BUFFRAMES * 2];
     memset(acc, 0, sizeof(int32_t) * frames * 2);
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     for (int c = 1; c <= VVOICE; c++) {
         Voice *v = &g_v[c];
         if (!v->playing || !v->s) continue;
@@ -59,13 +64,14 @@ static void mix(int16_t *out, int frames) {
         if (g_cd_pos >= g_cd_end) g_cd_track = 0;
     }
     int gain = g_gain;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
     for (int i = 0; i < frames * 2; i++) {
         int32_t v = acc[i] * gain / 256;
         out[i] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
     }
 }
 
+#ifdef _WIN32
 static DWORD WINAPI audio_thread(LPVOID p) {
     (void)p;
     for (;;) {
@@ -80,6 +86,19 @@ static DWORD WINAPI audio_thread(LPVOID p) {
     }
     return 0;
 }
+#else
+static void audio_cb(void *u, Uint8 *stream, int len) {   /* SDL: in stukken van hoogstens BUFFRAMES */
+    (void)u;
+    int16_t *o = (int16_t *)stream;
+    int frames = len / 4;
+    while (frames > 0) {
+        int k = frames < BUFFRAMES ? frames : BUFFRAMES;
+        mix(o, k);
+        o += k * 2;
+        frames -= k;
+    }
+}
+#endif
 
 static void cue_load(const char *cue) {
     FILE *f = fopen(cue, "rb");
@@ -105,11 +124,7 @@ static void cue_load(const char *cue) {
         if (!g_track_end[t]) g_track_end[t] = g_track_start[t + 1];
 }
 
-static int g_cs_init;
-void sound_init_cs(void) { if (!g_cs_init) { InitializeCriticalSection(&g_cs); g_cs_init = 1; } }
-
 void sound_init(void) {
-    sound_init_cs();
     /* CD: SKIPPER_1.BIN/.CUE */
     char cue[300];
     snprintf(cue, sizeof cue, "%s", P.bin_path);
@@ -118,6 +133,7 @@ void sound_init(void) {
     cue_load(cue);
     g_bin = fopen(P.bin_path, "rb");
     if (sound_headless) return;
+#ifdef _WIN32
     WAVEFORMATEX wf = {0};
     wf.wFormatTag = WAVE_FORMAT_PCM;
     wf.nChannels = 2;
@@ -134,6 +150,19 @@ void sound_init(void) {
     }
     g_ok = 1;
     CreateThread(NULL, 0, audio_thread, NULL, 0, NULL);
+#else
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO)) { fprintf(stderr, "[geluid] %s\n", SDL_GetError()); return; }
+    SDL_AudioSpec want = {0}, have;
+    want.freq = RATE;
+    want.format = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples = BUFFRAMES;
+    want.callback = audio_cb;
+    SDL_AudioDeviceID dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!dev) { fprintf(stderr, "[geluid] %s\n", SDL_GetError()); return; }
+    g_ok = 1;
+    SDL_PauseAudioDevice(dev, 0);
+#endif
 }
 
 void sound_play_member(int ch, CastLib *c, Member *m) {
@@ -143,21 +172,21 @@ void sound_play_member(int ch, CastLib *c, Member *m) {
 void sound_play_sound(int ch, Sound *s) {
     if (ch < 1 || ch > NCH) return;
     if (!s || !s->rate) return;
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_v[ch].s = s;
     g_v[ch].pos = 0;
     g_v[ch].step = (double)s->rate / RATE;
     g_v[ch].playing = 1;
     g_v[ch].start = now_ms();
     g_v[ch].dur = (uint32_t)((double)s->frames * 1000 / s->rate);
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }
 
 void sound_stop(int ch) {
     if (ch < 1 || ch > NCH) return;
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_v[ch].playing = 0;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }
 
 int sound_busy(int ch) {
@@ -170,24 +199,24 @@ int sound_busy(int ch) {
 void sound_set_level(int lvl) {
     if (lvl < 0) lvl = 0;
     if (lvl > 7) lvl = 7;
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_gain = lvl * 256 / 7;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }
 
 void cd_play_track(int track) {
     if (!g_bin || track < 1 || track > g_ntracks) { vm_error("CD-track %d niet beschikbaar", track); return; }
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_cd_track = track;
     g_cd_pos = g_track_start[track] * 2352L;
     g_cd_end = g_track_end[track] * 2352L;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }
 
 void cd_stop(void) {
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_cd_track = 0;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }
 
 int cd_playing(void) { return g_cd_track != 0; }
@@ -225,17 +254,17 @@ Sound *sound_load_wav(const char *path) {
 /* geluidsspoor van een video vanaf offset (seconden) */
 void sound_video_play(Sound *s, double offset) {
     if (!s || !s->rate) return;
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_v[VVOICE].s = s;
     g_v[VVOICE].pos = offset * s->rate;
     g_v[VVOICE].step = (double)s->rate / RATE;
     g_v[VVOICE].playing = g_v[VVOICE].pos < s->frames;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }
 
 void sound_video_stop(void) {
-    EnterCriticalSection(&g_cs);
+    plat_lock();
     g_v[VVOICE].playing = 0;
     g_v[VVOICE].s = NULL;
-    LeaveCriticalSection(&g_cs);
+    plat_unlock();
 }

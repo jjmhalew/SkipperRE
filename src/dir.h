@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "plat.h"
 
 #ifdef DBGHEAP
 void *dbg_malloc(size_t n, const char *file, int line);
@@ -362,12 +363,14 @@ const uint32_t *video_frame(Video *v, int n);  /* 0xAARRGGBB, w*h */
 Sound *video_audio(Video *v);
 Video *member_video(Member *m);   /* laadt het gekoppelde AVI-bestand lui */
 void bmp_write(const char *path, const uint32_t *px, int w, int h);
+void text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret);   /* text_gdi.c / text_ttf.c */
 uint32_t *stage_bitmap_argb(Bitmap *bm);
 void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t);
 int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintOMatic-document is */
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
 int disc_make_start(const char *setup_exe, const char *dst);
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
+int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_out, int nbin);   /* gekozen image of map */
 int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen);
 /* pack.c: spelbestanden achter de exe (tools/pack.py) */
 int pack_open(const char *root);
@@ -411,8 +414,21 @@ void xobj_register(void);
 Datum xobj_call(XObj *x, Datum *args, int n);
 Datum xobj_factory(const char *name);
 
-/* platform */
-uint32_t now_ms(void);
+/* main.c (overal hetzelfde) */
+extern int g_headless;
 void host_alert(const char *msg);
-void host_pump(void);          /* Windows-berichten verwerken zonder events te dispatchen */
+void host_pump(void);          /* OS-berichten verwerken zonder events te dispatchen */
 char *path_resolve(const char *p, char *out, int n);
+void input_push(int kind, int x, int y, int a, int b);   /* 1 muis neer, 2 muis op, 3 toets neer, 4 toets op (a = Mac-keyCode, b = teken) */
+void stage_fit(int cw, int ch, int *l, int *t, int *w, int *h);   /* podium in een venster van cw x ch: 4:3, gecentreerd */
+Datum cursor_wanted(void);     /* sprite-cursor onder de muis, anders cursor() */
+uint32_t *cursor_image(Datum c, int scale, int *w, int *h, int *hx, int *hy);   /* bitmapcursor (malloc) of NULL */
+
+/* host_win.c (Win32) / host_sdl.c (SDL2): venster, invoer, dialogen */
+int host_open(int scale, int fullscreen);
+void host_events(void);        /* OS-berichten -> input_push */
+void host_blit(const uint32_t *px);   /* 640x480 tonen */
+void host_message(const char *text, int warn);
+int host_pick_data(char *out, int n); /* cd-image of map kiezen; 0 = geannuleerd */
+void host_crash_init(void);
+int ld_save_game(int is_load);        /* slotkeuze; 0 = annuleren */

@@ -3,7 +3,7 @@
 #include "dir.h"
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h>
+
 
 #define SW 640
 #define SH 480
@@ -100,7 +100,7 @@ static void draw_bitmap(uint32_t *dst, int ox, int oy, int cw, int ch_, Bitmap *
     }
 }
 
-/* ------------------------------------------------------------------ tekst (GDI) */
+/* ------------------------------------------------------------------ tekst (text_gdi.c / text_ttf.c) */
 typedef struct TextCache { Text *t; uint32_t *img; int w, h, caret; } TextCache;
 static TextCache g_text[512];
 static int g_ntext;
@@ -125,58 +125,7 @@ static TextCache *text_render(Text *t, int caret) {
     free(tc->img);
     tc->w = w; tc->h = h;
     tc->img = malloc(sizeof(uint32_t) * w * h);
-    HDC dc = CreateCompatibleDC(NULL);
-    BITMAPINFO bi = {0};
-    bi.bmiHeader.biSize = sizeof bi.bmiHeader;
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = -h;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 32;
-    void *bits;
-    HBITMAP hb = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-    HGDIOBJ ob = SelectObject(dc, hb);
-    memset(bits, 0xff, (size_t)w * h * 4);   /* wit = achtergrond */
-    HFONT f = CreateFontA(-t->font_size, 0, 0, 0, (t->style & 1) ? FW_BOLD : FW_NORMAL, (t->style & 2) != 0,
-                          (t->style & 4) != 0, 0, DEFAULT_CHARSET, 0, 0, NONANTIALIASED_QUALITY, 0, t->font);
-    HGDIOBJ of = SelectObject(dc, f);
-    uint32_t fc = color_of(t->fore);
-    SetTextColor(dc, RGB(fc >> 16 & 255, fc >> 8 & 255, fc & 255));
-    SetBkMode(dc, TRANSPARENT);
-    RECT rc = {0, 0, w, h};
-    UINT fmt = DT_WORDBREAK | DT_NOPREFIX | (t->align == 1 ? DT_CENTER : t->align == -1 ? DT_RIGHT : DT_LEFT);
-    /* Director gebruikt \r als regeleinde */
-    int n = (int)strlen(t->text ? t->text : "");
-    char *txt = malloc(n * 2 + 1);
-    int k = 0;
-    for (int i = 0; i < n; i++) {
-        if (t->text[i] == '\r') { txt[k++] = '\r'; txt[k++] = '\n'; }
-        else txt[k++] = t->text[i];
-    }
-    txt[k] = 0;
-    DrawTextA(dc, txt, k, &rc, fmt);
-    if (caret) {
-        /* invoegpositie aan het eind van de laatste regel (links uitgelijnde naamvelden) */
-        const char *last = strrchr(txt, '\n');
-        last = last ? last + 1 : txt;
-        int nl = 0;
-        for (int i = 0; i < k; i++) if (txt[i] == '\n') nl++;
-        SIZE sz = {0, 0}, lh = {0, 0};
-        GetTextExtentPoint32A(dc, last, (int)strlen(last), &sz);
-        GetTextExtentPoint32A(dc, "Ag", 2, &lh);
-        RECT cr = {sz.cx + 1, nl * lh.cy, sz.cx + 2, nl * lh.cy + lh.cy};
-        HBRUSH br = CreateSolidBrush(RGB(fc >> 16 & 255, fc >> 8 & 255, fc & 255));
-        FillRect(dc, &cr, br);
-        DeleteObject(br);
-    }
-    free(txt);
-    GdiFlush();
-    memcpy(tc->img, bits, (size_t)w * h * 4);
-    for (int i = 0; i < w * h; i++) tc->img[i] |= 0xff000000u;
-    SelectObject(dc, of);
-    DeleteObject(f);
-    SelectObject(dc, ob);
-    DeleteObject(hb);
-    DeleteDC(dc);
+    text_raster(t, tc->img, w, h, color_of(t->fore), caret);
     t->dirty = 0;
     return tc;
 }
@@ -236,7 +185,7 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
     Player *save = CP;
     CP = ctx;
     int fch = ctx->mv ? player_focus_field() : 0;
-    int blink = (GetTickCount() / 500) & 1;
+    int blink = (now_ms() / 500) & 1;
     for (int ch = 1; ch <= NCHAN; ch++) {
         Channel *c = &ctx->ch[ch];
         if (!c->visible || !c->member || !ctx->mv || c->killed) continue;

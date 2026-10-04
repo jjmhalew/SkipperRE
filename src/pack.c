@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <windows.h>
 
 typedef struct { char *name; uint64_t off; uint32_t csize, usize; uint8_t method; } PEnt;
 
@@ -26,7 +25,7 @@ static uint64_t le64(const uint8_t *p) { return le32(p) | (uint64_t)le32(p + 4) 
 int pack_open(const char *root) {
     if (g_n) return 1;
     char exe[600];
-    GetModuleFileNameA(NULL, exe, sizeof exe);
+    plat_exe_path(exe, sizeof exe);
     FILE *f = fopen(exe, "rb");
     if (!f) return 0;
     uint8_t t[16];
@@ -90,7 +89,7 @@ static PEnt *pack_find(const char *path) {
 }
 
 int vfs_exists(const char *path) {
-    return GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES || pack_find(path) != NULL;
+    return plat_exists(path) || pack_find(path) != NULL;
 }
 
 /* hele bestand in het geheugen (malloc); echt bestand of uit het pakket */
@@ -125,16 +124,16 @@ uint8_t *vfs_load(const char *path, long *n) {
  * naar %TEMP%\SkipperRE uitgepakt. Anders blijft het pad zoals het is. */
 char *vfs_real(const char *path, char *out, int n) {
     snprintf(out, n, "%s", path);
-    if (GetFileAttributesA(path) != INVALID_FILE_ATTRIBUTES) return out;
+    if (plat_exists(path)) return out;
     PEnt *e = pack_find(path);
     if (!e) return out;
-    char tmp[MAX_PATH];
-    GetTempPathA(sizeof tmp, tmp);
-    snprintf(tmp + strlen(tmp), sizeof tmp - strlen(tmp), "SkipperRE");
-    CreateDirectoryA(tmp, NULL);
+    char tmp[PLAT_PATH];
+    plat_temp_dir(tmp, sizeof tmp);
+    snprintf(tmp + strlen(tmp), sizeof tmp - strlen(tmp), "\\SkipperRE");
+    plat_mkdir(tmp);
     const char *b = e->name;
     for (const char *q = e->name; *q; q++) if (*q == '\\') b = q + 1;
-    char dst[MAX_PATH];
+    char dst[PLAT_PATH];
     snprintf(dst, sizeof dst, "%s\\%s", tmp, b);
     long len;
     uint8_t *d = vfs_load(path, &len);

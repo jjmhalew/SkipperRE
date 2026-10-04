@@ -10,7 +10,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 
 #define ARG(i) ((i) < n ? a[i] : VOIDD)
 
@@ -38,9 +40,32 @@ Datum xobj_factory(const char *name) {
     return VOIDD;
 }
 
+/* VkKeyScan: teken -> virtuele toets (laag byte) + Shift (0x100), US-indeling */
+static int vk_key_scan(int c) {
+#ifdef _WIN32
+    return VkKeyScanA((char)c);
+#else
+    c &= 255;
+    if (c >= 'a' && c <= 'z') return c - 32;
+    if (c >= 'A' && c <= 'Z') return c | 0x100;
+    if (c >= '0' && c <= '9') return c;
+    static const char *sh = ")!@#$%^&*(";
+    const char *p = c ? strchr(sh, c) : NULL;
+    if (p) return ('0' + (int)(p - sh)) | 0x100;
+    switch (c) {
+    case ' ': return 0x20; case 13: return 0x0d; case 8: return 0x08; case 9: return 0x09; case 27: return 0x1b;
+    case '-': return 0xbd; case '_': return 0x1bd; case '=': return 0xbb; case '+': return 0x1bb;
+    case ',': return 0xbc; case '<': return 0x1bc; case '.': return 0xbe; case '>': return 0x1be;
+    case '/': return 0xbf; case '?': return 0x1bf; case ';': return 0xba; case ':': return 0x1ba;
+    case '\'': return 0xde; case '"': return 0x1de;
+    }
+    return -1;
+#endif
+}
+
 static const char *sarg(Datum d, char *buf, int n) { return d_tostr(d, buf, n); }
 
-int ld_save_game(int is_load);   /* main.c: slotkeuze */
+
 
 Datum xobj_call(XObj *x, Datum *a, int n) {
     if (n < 1 || ARG(0).t != T_SYM) return VOIDD;
@@ -57,8 +82,7 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
             path_resolve(sarg(ARG(5), b4, sizeof b4), b3, sizeof b3);
             vfs_real(b3, path, sizeof path);
             char out[512];
-            GetPrivateProfileStringA(sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2),
-                                     sarg(ARG(3), b3, sizeof b3), out, sizeof out, path);
+            ini_get(path, sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2), sarg(ARG(3), b3, sizeof b3), out, sizeof out);
             /* het origineel gaf een buffer met NUL terug; de scripts zoeken die op. Wij geven de
              * string zonder NUL; offset(NUL) = 0 -> scripts knippen dan 'char 1 to -1'. Voeg daarom
              * een expliciet eindteken toe dat offset wel vindt. */
@@ -70,13 +94,11 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
         if (!_stricmp(m, "mGetPrivateProfileInt")) {
             path_resolve(sarg(ARG(4), b4, sizeof b4), b3, sizeof b3);
             vfs_real(b3, path, sizeof path);
-            return d_int((int)GetPrivateProfileIntA(sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2),
-                                                    d_toint(ARG(3)), path));
+            return d_int(ini_get_int(path, sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2), d_toint(ARG(3))));
         }
         if (!_stricmp(m, "mWritePrivateProfileString")) {
             path_resolve(sarg(ARG(4), b4, sizeof b4), path, sizeof path);
-            return d_int(WritePrivateProfileStringA(sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2),
-                                                    sarg(ARG(3), b3, sizeof b3), path) ? 1 : 0);
+            return d_int(ini_set(path, sarg(ARG(1), b1, sizeof b1), sarg(ARG(2), b2, sizeof b2), sarg(ARG(3), b3, sizeof b3)));
         }
         break;
     case XK_FILEIO:
@@ -153,7 +175,7 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
             if (!_stricmp(g->fn, "CDPlaying")) return d_int(cd_playing());
             if (!_stricmp(g->fn, "CDStop")) { cd_stop(); return d_int(1); }
             if (!_stricmp(g->fn, "LoadSaveGame")) return d_int(ld_save_game(d_toint(ARG(2))));
-            if (!_stricmp(g->fn, "VkKeyScan")) return d_int(VkKeyScanA((char)d_toint(ARG(1))));
+            if (!_stricmp(g->fn, "VkKeyScan")) return d_int(vk_key_scan(d_toint(ARG(1))));
             if (!_stricmp(g->fn, "InvalidateRect") || !_stricmp(g->fn, "UpdateWindow")) { P.update_needed = 1; return d_int(0); }
             vm_error("MMSYS.%s niet geïmplementeerd", g->fn);
             return d_int(0);

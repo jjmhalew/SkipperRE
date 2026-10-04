@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <windows.h>
 
 /* ------------------------------------------------------------------ inflate */
 typedef struct {
@@ -198,7 +197,7 @@ static uint8_t *read_file(const char *path, size_t *n) {
     return b;
 }
 
-static int file_exists(const char *p) { return GetFileAttributesA(p) != INVALID_FILE_ATTRIBUTES; }
+static int file_exists(const char *p) { return plat_exists(p); }
 
 static uint32_t rd32(const uint8_t *p) { return p[0] | p[1] << 8 | p[2] << 16 | (uint32_t)p[3] << 24; }
 static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
@@ -287,7 +286,7 @@ static int skip_dir(const char *name) {
 
 static int iso_walk(Img *im, uint32_t lba, uint32_t size, const char *dst, int depth) {
     if (depth > 8) return 1;
-    CreateDirectoryA(dst, NULL);
+    plat_mkdir(dst);
     uint32_t nsec = (size + 2047) / 2048;
     uint8_t *dir = malloc((size_t)nsec * 2048);
     for (uint32_t i = 0; i < nsec; i++)
@@ -367,11 +366,17 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
     if (dot && (!_stricmp(dot, ".bin") || !_stricmp(dot, ".cue"))) {
         strcpy(dot, ".cue");
         if (!file_exists(cue)) strcpy(dot, ".CUE");
-        if (!cue_data_track(cue, bin, sizeof bin, &start, &im.hdr)) return 0;
-        im.raw = 1;
-    } else snprintf(bin, sizeof bin, "%s", image);   /* .iso: 2048-byte sectoren */
+        if (cue_data_track(cue, bin, sizeof bin, &start, &im.hdr)) im.raw = 1;
+        else if (!_stricmp(strrchr(image, '.'), ".bin")) snprintf(bin, sizeof bin, "%s", image);   /* BIN zonder CUE */
+        else return 0;
+    } else snprintf(bin, sizeof bin, "%s", image);   /* .iso (of een geopend bestand zonder naam): 2048-byte sectoren */
     im.f = fopen(bin, "rb");
     if (!im.f) return 0;
+    if (!im.raw) {   /* zonder CUE: ruwe sectoren herkennen aan het synchronisatiepatroon, datatrack vooraan */
+        static const uint8_t sync[12] = {0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
+        uint8_t h[16];
+        if (fread(h, 1, 16, im.f) == 16 && !memcmp(h, sync, 12)) { im.raw = 1; im.hdr = h[15] == 2 ? 24 : 16; }
+    }
     uint8_t pvd[2048];
     int ok = 0;
     if (img_sector(&im, start + 16, pvd) && pvd[0] == 1 && !memcmp(pvd + 1, "CD001", 5)) {
@@ -390,62 +395,60 @@ static int has_game(const char *dir) {
     return file_exists(p);
 }
 
-/* eerste .cue in een map (voor een image naast de exe of in de werkmap) */
-static int find_cue(const char *dir, char *out, int n) {
-    char pat[600];
-    snprintf(pat, sizeof pat, "%s\\*.cue", dir);
-    WIN32_FIND_DATAA fd;
-    HANDLE h = FindFirstFileA(pat, &fd);
-    if (h == INVALID_HANDLE_VALUE) return 0;
-    snprintf(out, n, "%s\\%s", dir, fd.cFileName);
-    FindClose(h);
-    return 1;
-}
-
 /* Zoekt de spelbestanden. data = wat de gebruiker opgaf (of "extract"), image = --bin/--image (of "").
  * Schrijft de gevonden map in out; bin_out krijgt het BIN-pad als dat bekend wordt (CD-audio). */
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin) {
-    char exe[600], exedir[600], cand[600];
-    GetModuleFileNameA(NULL, exe, sizeof exe);
-    snprintf(exedir, sizeof exedir, "%s", exe);
-    char *sl = strrchr(exedir, '\\');
-    if (sl) *sl = 0;
-    GetFullPathNameA(data, sizeof cand, cand, NULL);
+    char exedir[PLAT_PATH], cand[PLAT_PATH];
+    plat_exe_dir(exedir, sizeof exedir);
+    plat_full_path(data, cand, sizeof cand);
     if (has_game(cand)) { snprintf(out, n, "%s", cand); return 1; }
     if (pack_open(exedir)) { snprintf(out, n, "%s", exedir); return 1; }   /* alles in de exe */
     const char *rel[] = {"%s\\extract", "%s\\..\\extract", "%s\\data"};
     for (int i = 0; i < 3; i++) {
-        char p[600];
+        char p[PLAT_PATH];
         snprintf(p, sizeof p, rel[i], exedir);
-        GetFullPathNameA(p, sizeof cand, cand, NULL);
+        plat_full_path(p, cand, sizeof cand);
         if (has_game(cand)) { snprintf(out, n, "%s", cand); return 1; }
     }
-    char appdata[600];
+    char appdata[PLAT_PATH];
     snprintf(appdata, sizeof appdata, "%s\\data", appdir);
     if (has_game(appdata)) { snprintf(out, n, "%s", appdata); return 1; }   /* eerder uitgepakt */
     if (image && image[0] && disc_extract(image, appdata, bin_out, nbin) && has_game(appdata)) {
         snprintf(out, n, "%s", appdata);
         return 1;
     }
-    /* cd-stations */
-    DWORD drives = GetLogicalDrives();
-    for (int d = 0; d < 26; d++) {
-        if (!(drives & (1u << d))) continue;
-        char root[8] = {(char)('A' + d), ':', '\\', 0};
-        if (GetDriveTypeA(root) != DRIVE_CDROM) continue;
-        char p[8] = {(char)('A' + d), ':', 0};
-        if (has_game(p)) { snprintf(out, n, "%s", p); return 1; }
-    }
-    /* een .cue naast de exe, in de werkmap of een map hoger */
-    char cue[600];
-    const char *dirs[] = {exedir, ".", ".."};
-    for (int i = 0; i < 3; i++) {
-        char full[600];
-        GetFullPathNameA(dirs[i], sizeof full, full, NULL);
-        if (find_cue(full, cue, sizeof cue) && disc_extract(cue, appdata, bin_out, nbin) && has_game(appdata)) {
-            snprintf(out, n, "%s", appdata);
-            return 1;
+    /* cd-stations (Linux: gemounte schijven) */
+    char cds[64][PLAT_PATH];
+    int ncd = plat_cd_dirs(cds, 64);
+    for (int i = 0; i < ncd; i++)
+        if (has_game(cds[i])) { snprintf(out, n, "%s", cds[i]); return 1; }
+    /* een .cue of .iso naast de exe, in de werkmap of een map hoger */
+    char img[PLAT_PATH];
+    const char *dirs[] = {exedir, ".", ".."}, *exts[] = {".cue", ".iso"};
+    for (int i = 0; i < 3; i++)
+        for (int e = 0; e < 2; e++) {
+            char full[PLAT_PATH];
+            plat_full_path(dirs[i], full, sizeof full);
+            if (plat_find_ext(full, exts[e], img, sizeof img) && disc_extract(img, appdata, bin_out, nbin) && has_game(appdata)) {
+                snprintf(out, n, "%s", appdata);
+                return 1;
+            }
         }
+    return 0;
+}
+
+/* een gekozen image of map (bestandskiezer) -> datamap; 1 = gelukt */
+int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_out, int nbin) {
+    if (plat_is_dir(pick)) {
+        if (has_game(pick)) { snprintf(out, n, "%s", pick); return 1; }
+        char img[PLAT_PATH];   /* een map met een image erin */
+        if (!plat_find_ext(pick, ".cue", img, sizeof img) && !plat_find_ext(pick, ".iso", img, sizeof img) &&
+            !plat_find_ext(pick, ".bin", img, sizeof img))
+            return 0;
+        return disc_use(img, appdir, out, n, bin_out, nbin);
     }
+    char appdata[PLAT_PATH];
+    snprintf(appdata, sizeof appdata, "%s\\data", appdir);
+    if (disc_extract(pick, appdata, bin_out, nbin) && has_game(appdata)) { snprintf(out, n, "%s", appdata); return 1; }
     return 0;
 }
