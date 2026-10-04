@@ -10,6 +10,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 /* ------------------------------------------------------------------ inflate */
 typedef struct {
@@ -356,6 +360,31 @@ static int cue_data_track(const char *cue, char *bin, int nbin, uint32_t *lba, i
     return 1;
 }
 
+/* Een image openen. "/proc/self/fd/N" is een bestand dat de bestandskiezer al geopend heeft (Android): dat lezen we via
+ * een kopie van de descriptor. Opnieuw openen via het /proc-pad mag op Android niet, de app heeft geen rechten op het
+ * echte pad (bijv. Download/). */
+static FILE *img_open(const char *path) {
+#ifndef _WIN32
+    int fd;
+    char rest;
+    if (sscanf(path, "/proc/self/fd/%d%c", &fd, &rest) == 1) {
+        int d = dup(fd);
+        FILE *f = d >= 0 ? fdopen(d, "rb") : NULL;
+        if (!f && d >= 0) close(d);
+        if (f && fseeko(f, 0, SEEK_SET)) {   /* geen gewoon bestand (pijp van een cloud-app): niet bruikbaar */
+            fprintf(stderr, "[disc] %s: niet doorzoekbaar (%s)\n", path, strerror(errno));
+            fclose(f);
+            return NULL;
+        }
+        if (!f) fprintf(stderr, "[disc] %s: %s\n", path, strerror(errno));
+        return f;
+    }
+#endif
+    FILE *f = fopen(path, "rb");
+    if (!f) fprintf(stderr, "[disc] %s: %s\n", path, strerror(errno));
+    return f;
+}
+
 /* image (CUE, BIN met CUE ernaast, of ISO) uitpakken naar dst; 1 = gelukt */
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
     char cue[600], bin[600];
@@ -370,7 +399,7 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
         else if (!_stricmp(strrchr(image, '.'), ".bin")) snprintf(bin, sizeof bin, "%s", image);   /* BIN zonder CUE */
         else return 0;
     } else snprintf(bin, sizeof bin, "%s", image);   /* .iso (of een geopend bestand zonder naam): 2048-byte sectoren */
-    im.f = fopen(bin, "rb");
+    im.f = img_open(bin);
     if (!im.f) return 0;
     uint8_t pvd[2048];
     if (!im.raw && !(img_sector(&im, 16, pvd) && pvd[0] == 1 && !memcmp(pvd + 1, "CD001", 5))) {
@@ -396,7 +425,7 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
         ok = iso_walk(&im, rd32(pvd + 156 + 2), rd32(pvd + 156 + 10), dst, 0);
     }
     fclose(im.f);
-    if (ok && bin_out && im.raw) snprintf(bin_out, nbin, "%s", bin);
+    if (ok && bin_out && im.raw && strncmp(bin, "/proc/", 6)) snprintf(bin_out, nbin, "%s", bin);   /* fd: gaat zo dicht */
     return ok;
 }
 
