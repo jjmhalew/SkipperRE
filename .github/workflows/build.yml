@@ -20,7 +20,7 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Zig
         run: pip install ziglang==0.16.0
@@ -49,7 +49,7 @@ jobs:
           Compress-Archive -Path "pkg/$name" -DestinationPath "$name-windows.zip"
           "ZIP=$name-windows.zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SkipperRE-windows
           path: ${{ env.ZIP }}
@@ -58,7 +58,7 @@ jobs:
   linux:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install SDL2
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libsdl2-dev
@@ -76,7 +76,7 @@ jobs:
           tar -C pkg -czf "$name-linux-x86_64.tar.gz" "$name"
           echo "TGZ=$name-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SkipperRE-linux
           path: ${{ env.TGZ }}
@@ -89,7 +89,7 @@ jobs:
   android:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build
         working-directory: android
@@ -113,7 +113,7 @@ jobs:
           cp android/app/build/outputs/apk/release/app-release.apk "$name.apk" && ls -l "$name.apk"
           echo "APK=$name.apk" >> "$GITHUB_ENV"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SkipperRE-android
           path: ${{ env.APK }}
@@ -124,11 +124,11 @@ jobs:
     needs: [windows, linux, android]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
