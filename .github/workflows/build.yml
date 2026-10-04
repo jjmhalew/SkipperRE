@@ -1,0 +1,144 @@
+# Builds skipper.exe (Windows, Zig), skipper (Linux, SDL2) and the Android APK on every push and pull request. No game data
+# is involved: the programs hold only the port's own code; each job runs the transition test (--transtest), which needs
+# no game files. A pushed tag v* also publishes a GitHub release with SkipperRE-<tag>-windows.zip (skipper.exe, README.md,
+# LICENSE), SkipperRE-<tag>-linux-x86_64.tar.gz (skipper, README.md, LICENSE) and SkipperRE-<tag>.apk.
+name: build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zig
+        run: pip install ziglang==0.16.0
+
+      - name: Build
+        run: RELEASE=1 ./build.sh && ls -l out/skipper.exe
+
+      - name: Test
+        run: mkdir -p out/trans && out/skipper.exe --transtest out/trans && ls out/trans | wc -l
+
+      - name: Check the version
+        shell: pwsh
+        run: |
+          $v = (Get-Item out/skipper.exe).VersionInfo
+          "skipper.exe: $((Get-Item out/skipper.exe).Length) bytes, $($v.ProductName) $($v.ProductVersion)"
+          # a release tag must match res/skipperre.rc (the exe's and the APK's version): v1.2.3 = "1.2.3"
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$($v.ProductVersion)") {
+            "::error::tag $env:GITHUB_REF_NAME does not match the version in res/skipperre.rc ($($v.ProductVersion))"; exit 1 }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          $name = if ($env:GITHUB_REF_TYPE -eq 'tag') { "SkipperRE-$env:GITHUB_REF_NAME" } else { "SkipperRE-$($env:GITHUB_SHA.Substring(0, 7))" }
+          New-Item -ItemType Directory -Force "pkg/$name" | Out-Null
+          Copy-Item out/skipper.exe, README.md, LICENSE "pkg/$name/"
+          Compress-Archive -Path "pkg/$name" -DestinationPath "$name-windows.zip"
+          "ZIP=$name-windows.zip" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkipperRE-windows
+          path: ${{ env.ZIP }}
+
+  # Ubuntu 22.04: glibc 2.35 and SDL 2.0.20, so the binary also runs on older distributions and on SteamOS.
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDL2
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libsdl2-dev
+
+      - name: Build
+        run: RELEASE=1 ./build.sh && ls -l out/skipper && ldd out/skipper
+
+      - name: Test
+        run: mkdir -p out/trans && out/skipper --transtest out/trans && ls out/trans | wc -l
+
+      - name: Package
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="SkipperRE-$GITHUB_REF_NAME"; else name="SkipperRE-${GITHUB_SHA:0:7}"; fi
+          mkdir -p "pkg/$name" && cp out/skipper README.md LICENSE "pkg/$name/"
+          tar -C pkg -czf "$name-linux-x86_64.tar.gz" "$name"
+          echo "TGZ=$name-linux-x86_64.tar.gz" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkipperRE-linux
+          path: ${{ env.TGZ }}
+
+  # Android: arm64 phones and tablets, x86_64 for the emulator and Chromebooks. CMake fetches SDL 2.32.10; the runner's SDK
+  # installs NDK 27.2 when it lacks it. Signed with the release key of the repository secrets ANDROID_KEYSTORE_B64 (the
+  # keystore, base64), ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD (store and key) when they are set. Without them the APK
+  # carries the runner's debug key, which can differ from run to run: such an APK may not install over the one before it
+  # (Android wants the same key), and uninstalling first also deletes the copied game files and the saves.
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            printf '%s' "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/skipper.jks"
+            export ORG_GRADLE_PROJECT_skipperKeystore="$RUNNER_TEMP/skipper.jks" ORG_GRADLE_PROJECT_skipperKeyAlias="$KEY_ALIAS" ORG_GRADLE_PROJECT_skipperKeyPassword="$KEY_PASSWORD"
+          elif [ "$GITHUB_REF_TYPE" = tag ]; then
+            echo "::warning::no ANDROID_KEYSTORE_B64 secret: this release APK is signed with the runner's debug key and may not install over an earlier one"
+          fi
+          chmod +x gradlew
+          JAVA_HOME="$JAVA_HOME_17_X64" ./gradlew assembleRelease --console=plain
+
+      - name: Package
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="SkipperRE-$GITHUB_REF_NAME"; else name="SkipperRE-${GITHUB_SHA:0:7}"; fi
+          cp android/app/build/outputs/apk/release/app-release.apk "$name.apk" && ls -l "$name.apk"
+          echo "APK=$name.apk" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SkipperRE-android
+          path: ${{ env.APK }}
+
+  # The release notes: the annotated tag's message (what is new; its first line is the title of the tag), then how to start.
+  release:
+    if: github.ref_type == 'tag'
+    needs: [windows, linux, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          new=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed -e 's/[[:space:]]*$//')
+          start="Windows: unzip and start skipper.exe; it finds the Skipper & Skeeto CD in the drive, or asks for an image of it (SKIPPER_1.BIN / .CUE / .ISO) or a folder with its files. Linux / Steam Deck: unpack the .tar.gz and start skipper (needs SDL2). Android: install the .apk and choose the CD image (BIN or ISO) or a copy of the CD at the first start. The game files are not included - you need your own CD; see README.md."
+          if [ -n "$new" ]; then printf '%s\n\n%s\n' "$new" "$start" > notes.md; else printf '%s\n' "$start" > notes.md; fi
+          gh release create "$GITHUB_REF_NAME" dist/* --title "SkipperRE $GITHUB_REF_NAME" --notes-file notes.md

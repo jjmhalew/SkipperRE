@@ -100,12 +100,21 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [x] Game files found automatically: data folder, `%APPDATA%\SkipperRE\data`, CD drive, or a BIN/CUE/ISO that is
       extracted once (`src/disc.c`); `start.dxr` is pulled from the Wise installer. *(MDF/MDS not supported;
       `tools/iso.py` still has a hard-coded path)*
-- [x] Release build (`RELEASE=1 ./build.sh`: -O2, no UBSan), window icon from `Magnus.ico` on the disc.
-      *(version info left out)*
-- [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 15 checks, ~1 minute)* (13 hotspots + walk/drag/mailbox/boss scenarios) as a script, for
-      example `tools/regress.sh`.
+- [x] Release build (`RELEASE=1 ./build.sh`: -O2, no UBSan, GUI subsystem = no console window), window icon from
+      `Magnus.ico` on the disc (or `res/skipperre.ico`), version info from `res/skipperre.rc` (0.9.0).
+- [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 16 checks, 2-3 s with the virtual clock; same pictures
+      on Windows and Linux)* (13 hotspots + walk/drag/mailbox/boss/bucket scenarios).
 - [x] **Single exe** (`tools/pack.py` → `dist/Skipper.exe`, ~140 MB): game files appended to the exe
       (`src/pack.c`), icon as a resource. Regression sweep 15/15 against the packed exe from an empty folder.
+- [x] **File picker** when the game files are not found (Windows: open dialog; Linux: zenity/kdialog; Android: SAF).
+- [x] **Linux** build (SDL2, `src/host_sdl.c`, TTF text): regression 16/16 in WSL Ubuntu; window not seen yet.
+- [x] **Android** APK (`android/`): first start with the system file picker, touch buttons in the side bars;
+      tested in the emulator (intro, room, load screen, clock game). *(the picker flow itself only by its parts:
+      BIN through a file descriptor tested on Linux; not on a real phone yet)*
+- [x] **Controllers** (DualSense / DS4 / XInput on Windows, SDL elsewhere) as mouse + function keys; SDL path
+      tested with a virtual controller. *(a real pad not tried yet)*
+- [x] **Texture packs** (`--dumptex`, `mods/textures`, HD 2-4x) and **intro skip** when a save exists.
+- [x] **CI** (`.github/workflows/build.yml`): Windows zip, Linux tar.gz, APK; release on a `v*` tag.
 - [ ] Optional: a "Liedjes" menu for the 15 CD-audio songs (the original `Liedjes.exe` is a separate
       launcher; `src/sound.c` can already play CD audio from the BIN).
 
