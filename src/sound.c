@@ -57,9 +57,13 @@ static void mix(int16_t *out, int frames) {
                 if (v->fade_left <= 0) { v->playing = 0; v->fade_total = 0; break; }
                 vol = g_vol[c] * v->fade_left-- / v->fade_total;
             }
+            /* lineair tussen twee samples: 11/22 kHz naar 44,1 kHz zonder het harde 'trapjes'-gekras */
+            int k2 = k + 1 < s->frames ? k + 1 : s->loop ? 0 : k, f = (int)((v->pos - k) * 256);
             int l, r;
-            if (s->channels == 2) { l = s->pcm[2 * k]; r = s->pcm[2 * k + 1]; }
-            else l = r = s->pcm[k];
+            if (s->channels == 2) {
+                l = s->pcm[2 * k] + ((s->pcm[2 * k2] - s->pcm[2 * k]) * f >> 8);
+                r = s->pcm[2 * k + 1] + ((s->pcm[2 * k2 + 1] - s->pcm[2 * k + 1]) * f >> 8);
+            } else l = r = s->pcm[k] + ((s->pcm[k2] - s->pcm[k]) * f >> 8);
             acc[2 * i] += l * vol / 255;
             acc[2 * i + 1] += r * vol / 255;
             v->pos += v->step;
