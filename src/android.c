@@ -80,31 +80,37 @@ int android_pick_data(char *out, int n) {
     char user[PLAT_PATH];
     plat_user_dir(user, sizeof user);
     for (;;) {
-        int k = android_dialog("Welkom bij Skipper & Skeeto in Pretpark!\n\n"
-                               "De spelbestanden komen van je eigen cd. Kies een image van de cd (SKIPPER_1.BIN of een .iso), "
-                               "of een map met een kopie van alle bestanden op de cd. Ze worden eenmalig in de app gezet "
-                               "(ongeveer 200 MB).",
-                               "Cd-image", "Map van de cd", "Stoppen");
+        int k = android_dialog(UI("Welkom bij Skipper & Skeeto in Pretpark!\n\n"
+                                  "De spelbestanden komen van je eigen cd. Kies een image van de cd (SKIPPER_1.BIN, een .iso "
+                                  "of een .img), of een map met een kopie van alle bestanden op de cd. Ze worden eenmalig in "
+                                  "de app gezet (ongeveer 200 MB).",
+                                  "Welcome to Skipper & Skeeto (Magnus & Myggen)!\n\n"
+                                  "The game files come from your own CD. Choose an image of the CD (a .bin, .iso or .img), "
+                                  "or a folder with a copy of all files on the CD. They are put into the app once (about "
+                                  "200 MB)."),
+                               UI("Cd-image", "CD image"), UI("Map van de cd", "CD folder"), UI("Stoppen", "Quit"));
         if (k < 0) return 0;
         if (k == 1) {
             int fd = java_pick(1, NULL);
             if (fd == -1) continue;
-            if (fd < 0) { android_dialog("Dat bestand kon niet worden geopend.", "OK", NULL, NULL); continue; }
+            if (fd < 0) { android_dialog(UI("Dat bestand kon niet worden geopend.", "That file could not be opened."), "OK", NULL, NULL); continue; }
             char img[64], bin[PLAT_PATH] = "";
             snprintf(img, sizeof img, "/proc/self/fd/%d", fd);
-            progress("Spelbestanden uitpakken...");
+            progress(UI("Spelbestanden uitpakken...", "Unpacking the game files..."));
             int ok = disc_use(img, user, out, n, bin, sizeof bin);
             progress(NULL);
             close(fd);
             if (ok) return 1;
-            android_dialog("In dat bestand staan de spelbestanden van Skipper & Skeeto niet. Kies het image van de cd "
-                           "(SKIPPER_1.BIN, niet het .cue-bestand) of een .iso.", "OK", NULL, NULL);
+            android_dialog(UI("In dat bestand staan de spelbestanden van Skipper & Skeeto niet. Kies het image van de cd "
+                              "(SKIPPER_1.BIN, niet het .cue-bestand), een .iso of een .img.",
+                              "The game files of Skipper & Skeeto are not in that file. Choose the image of the CD "
+                              "(the .bin, not the .cue file; the .img, not the .ccd), or an .iso."), "OK", NULL, NULL);
         } else {
             char part[PLAT_PATH], data[PLAT_PATH];
             snprintf(part, sizeof part, "%s/data.part", user);
             snprintf(data, sizeof data, "%s/data", user);
             plat_mkdir(part);
-            progress("Spelbestanden kopiëren...");
+            progress(UI("Spelbestanden kopiëren...", "Copying the game files..."));
             int r = java_pick(2, part);
             progress(NULL);
             if (r == -1) continue;
@@ -113,7 +119,9 @@ int android_pick_data(char *out, int n) {
                 if (rename(part, data) == 0) snprintf(out, n, "%s", data);
                 return 1;
             }
-            android_dialog("In die map staan de spelbestanden van Skipper & Skeeto niet (Magnus.dxr ontbreekt).", "OK", NULL, NULL);
+            android_dialog(UI("In die map staan de spelbestanden van Skipper & Skeeto niet (Magnus.dxr ontbreekt).",
+                              "The game files of Skipper & Skeeto are not in that folder (Magnus.dxr is missing)."),
+                           "OK", NULL, NULL);
         }
     }
 }
@@ -132,13 +140,34 @@ void android_init(void) {
  * (de globals van het spel zelf), het volume is één paneel met de rode meter van het spel en knoppen - en +. */
 void host_sdl_to_stage(float wx, float wy, int *x, int *y);   /* host_sdl.c */
 enum { K_KEY, K_TOGGLE, K_DOWN, K_UP };
-typedef struct Btn { const char *label; int code, ch, kind; const char *global; SDL_Rect r; SDL_Texture *tex; int tw, th; } Btn;
+typedef struct Btn { int code, ch, kind; const char *global; SDL_Rect r; SDL_Texture *tex; int tw, th; } Btn;
 static Btn g_btn[] = {
-    {"Laden", 96, 0, K_KEY}, {"Opslaan", 97, 0, K_KEY}, {"Uitleg", 122, 0, K_KEY}, {"Stoppen", 53, 27, K_KEY},
-    {"Tekst", 120, 0, K_TOGGLE, "gSubTextOn"}, {"Muziek", 99, 0, K_TOGGLE, "gBkgSoundOn"},
-    {"Zachter", 125, 0, K_DOWN}, {"Harder", 126, 0, K_UP},
+    {96, 0, K_KEY}, {97, 0, K_KEY}, {122, 0, K_KEY}, {53, 27, K_KEY},
+    {120, 0, K_TOGGLE, "gSubTextOn"}, {99, 0, K_TOGGLE, "gBkgSoundOn"},
+    {125, 0, K_DOWN}, {126, 0, K_UP},
 };
 #define NBTN (int)(sizeof g_btn / sizeof *g_btn)
+
+/* Labels in de teksttaal van het spel (gCurTxtLanguage; de Scandinavische cd kiest die in zijn instellingendialoog):
+ * de knoppen hierboven, dan menu, volume, aan, uit. Windows-1252, zoals text_raster verwacht. */
+#define NLBL (NBTN + 4)
+static const struct { const char *code; const char *s[NLBL]; } g_lang[] = {
+    {"NL", {"Laden", "Opslaan", "Uitleg", "Stoppen", "Tekst", "Muziek", "Zachter", "Harder", "Menu", "Volume", "aan", "uit"}},
+    {"DK", {"Hent", "Gem", "Hj\xe6lp", "Stop", "Tekst", "Lyde", "Lavere", "H\xf8jere", "Menu", "Lydstyrke", "til", "fra"}},
+    {"N", {"Hent", "Lagre", "Hjelp", "Stopp", "Tekst", "Lyder", "Lavere", "H\xf8yere", "Meny", "Lydstyrke", "p\xe5", "av"}},
+    {"S", {"H\xe4mta", "Spara", "Hj\xe4lp", "Sluta", "Text", "Ljud", "L\xe4gre", "H\xf6gre", "Meny", "Volym", "p\xe5", "av"}},
+    {"SF", {"Lataa", "Tallenna", "Ohje", "Lopeta", "Teksti", "\xc4\xe4net", "Hiljemmin", "Kovemmin", "Valikko", "Voimakkuus",
+            "p\xe4\xe4ll\xe4", "pois"}},
+};
+static int g_lbl_lang = -1;      /* taal van de huidige labels */
+
+static int text_lang(void) {
+    Datum *g = global_find(sym("gCurTxtLanguage"));
+    if (g && g->t == T_SYM)
+        for (int i = 0; i < (int)(sizeof g_lang / sizeof *g_lang); i++)
+            if (!_stricmp(symname(g->u.i), g_lang[i].code)) return i;
+    return 0;
+}
 static int g_side;               /* 1: knoppen in de zijbalken, 0: achter de menuknop */
 static int g_menu_open;
 static SDL_Rect g_menu;          /* de menuknop (alleen als g_side == 0) */
@@ -220,14 +249,17 @@ static void layout(SDL_Renderer *r) {
         if (lh > bw / 6) lh = bw / 6;
     }
     if (lh < 8) lh = 8;
-    if (lh != g_label_h) {   /* labels opnieuw op deze grootte */
+    int lang = text_lang();
+    if (lh != g_label_h || lang != g_lbl_lang) {   /* labels opnieuw op deze grootte of in de nieuwe taal */
         g_label_h = lh;
-        for (int i = 0; i < NBTN; i++) relabel(&g_btn[i].tex, r, g_btn[i].label, lh, &g_btn[i].tw, &g_btn[i].th);
+        g_lbl_lang = lang;
+        const char *const *s = g_lang[lang].s;
+        for (int i = 0; i < NBTN; i++) relabel(&g_btn[i].tex, r, s[i], lh, &g_btn[i].tw, &g_btn[i].th);
         int th, sl = lh * 3 / 4 < 8 ? 8 : lh * 3 / 4;
-        relabel(&g_menu_tex, r, "Menu", lh, &g_menu_tw, &th);
-        relabel(&g_vol_tex, r, "Volume", lh, &g_vol_tw, &th);
-        relabel(&g_on_tex, r, "aan", sl, &g_on_tw, &g_small_th);
-        relabel(&g_off_tex, r, "uit", sl, &g_off_tw, &g_small_th);
+        relabel(&g_menu_tex, r, s[NBTN], lh, &g_menu_tw, &th);
+        relabel(&g_vol_tex, r, s[NBTN + 1], lh, &g_vol_tw, &th);
+        relabel(&g_on_tex, r, s[NBTN + 2], sl, &g_on_tw, &g_small_th);
+        relabel(&g_off_tex, r, s[NBTN + 3], sl, &g_off_tw, &g_small_th);
     }
 }
 

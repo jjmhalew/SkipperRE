@@ -8,3 +8,4 @@ __pycache__/
 dist/
 SkipperRE-standalone.exe
 tools/zig/
+releases/

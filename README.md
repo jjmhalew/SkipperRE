@@ -9,6 +9,22 @@ de releases.
 > Ivanoff Interactive of de makers van Skipper & Skeeto; namen en merken zijn van hun eigenaars. Je hebt je eigen
 > exemplaar van het spel nodig.
 
+**Ondersteunde cd's** (details in [docs/RELEASES.md](docs/RELEASES.md)):
+- de Nederlandse cd *Skipper & Skeeto in Pretpark* (1997), ook de herpersing van 2003 (dezelfde spelbestanden);
+- de Scandinavische cd *Magnus & Myggen* (Ivanoff Interactive), met spraak en tekst in vier talen: Deens (*Magnus og
+  Myggen*), Noors (*Magnus & Myggen*), Zweeds (*Magnus och Myggan*) en Fins (*Manu ja Matti*). Bij de eerste start
+  kiest de speler de taal van het systeem (anders Deens); daarna wissel je in het spel zelf, met de vlaggen in het
+  instellingenscherm (F7), apart voor spraak en tekst. `--lang DK|N|S|SF` kiest hem vanaf de opdrachtregel.
+
+Niet ondersteund: de eerste Deense uitgave van 1996 (Director 4, een eerdere versie van het spel) en de latere
+heruitgaven op een installer-cd (*Superstarter*, Director 8.5 en 10).
+
+> **English, for the Nordic CD:** SkipperRE also plays the Danish / Norwegian / Swedish / Finnish CD *Magnus & Myggen*
+> (*Magnus og Myggen*, *Magnus och Myggan*, *Manu ja Matti*): start it, pick the CD image (`.cue`/`.bin`, `.iso`, or
+> CloneCD `.img`/`.ccd`) or the CD drive, and the game starts in your system's language. Speech and text language are
+> switched in the game's own settings screen (F7), or with `--lang DK|N|S|SF`. The player's own messages are in
+> English unless your system is Dutch.
+
 ## Spelen
 **Windows**: download de `windows.zip` van de [Releases](../../releases)-pagina (of bouw hem zelf, zie onder), pak hem
 uit in een eigen map en start `skipper.exe`. (De exe is niet ondertekend; zegt SmartScreen "Windows heeft uw pc
@@ -16,9 +32,10 @@ beschermd": *Meer informatie*, dan *Toch uitvoeren*.) Hij zoekt de spelbestanden
 1. de map die je opgeeft (`skipper.exe <map>`), of `extract\` / `data\` naast de exe;
 2. `%APPDATA%\SkipperRE\data` (een eerder uitgepakte cd);
 3. een cd-station met de cd erin;
-4. een cd-image naast de exe of in de werkmap (`.cue` of `.iso`), of `--bin <SKIPPER_1.BIN, .CUE of .ISO>`;
-5. anders vraagt hij erom: kies het image (`.cue`, `.bin` of `.iso`) of `Magnus.dxr` op de cd of in een map met
-   de bestanden van de cd.
+4. een cd-image naast de exe of in de werkmap (`.cue`, `.iso` of CloneCD `.ccd`), of
+   `--bin <SKIPPER_1.BIN, .CUE, .ISO of .IMG>`;
+5. anders vraagt hij erom: kies het image (`.cue`, `.bin`, `.iso`, `.img` of `.ccd`) of `Magnus.dxr` op de cd of in
+   een map met de bestanden van de cd.
 
 Een image wordt eenmalig uitgepakt naar `%APPDATA%\SkipperRE\data` (~200 MB); daarna is de cd niet meer nodig. Ook
 een `.bin` zonder `.cue` werkt (de datatrack wordt opgezocht).
@@ -30,7 +47,7 @@ erom met `zenity` of `kdialog`. Op de Steam Deck: voeg `skipper` toe als niet-St
 
 **Android** (7.0 of nieuwer, 64-bit): installeer `SkipperRE-<versie>.apk` (sta installeren uit je browser of
 bestandsbeheer toe als Android erom vraagt). Bij de eerste start kies je in Androids bestandskiezer het image van de
-cd (`SKIPPER_1.BIN` of een `.iso`) of een map met een kopie van de cd; de bestanden komen in de app
+cd (`SKIPPER_1.BIN`, een `.iso` of een CloneCD-`.img`) of een map met een kopie van de cd; de bestanden komen in de app
 (`Android/data/io.github.jjmhalew.skipperre/files/data`). Opgeslagen spellen en `skipper.log` staan in
 `Android/data/io.github.jjmhalew.skipperre/files`.
 
@@ -97,9 +114,10 @@ Het spel is gemaakt met **Macromedia Director 5** (bestandsversie 1217). Er is d
 alle logica zit als Lingo-bytecode in de `.dxr`-films. De port is daarom een eigen Director 5-runtime
 (RIFX-container, cast, score, Lingo-VM) plus native vervangers voor de paar DLL's die het spel aanroept.
 
-De opstartfilm `start.dxr` staat niet los op de cd: die zit in de projector `start32.exe`, als deflate-stroom
-in de Wise-installer `SETUP.EXE`. De speler haalt hem daar eenmalig uit (`src/disc.c`: eigen inflate en
-ISO9660-lezer). Voor de Python-tools kun je nog steeds `extract/` en `game/` handmatig vullen (`.gitignore`).
+De opstartfilm `start.dxr` staat niet los op de cd: die zit in de projector `start32.exe`, op de Nederlandse cd als
+deflate-stroom in de Wise-installer `SETUP.EXE`, op de Scandinavische los als `START32.EXE`. De speler haalt hem daar
+eenmalig uit (`src/disc.c`: eigen inflate en ISO9660-lezer). Voor de Python-tools kun je nog steeds `extract/` en
+`game/` handmatig vullen (`.gitignore`).
 
 ## Stand van zaken
 - **Disc ontleed**: Enhanced CD, sessie 1 = 15 audiotracks (muziek), sessie 2 = ISO9660-datatrack
@@ -129,7 +147,7 @@ ISO9660-lezer). Voor de Python-tools kun je nog steeds `extract/` en `game/` han
 | `src/ini.c` | INI-bestanden zoals Windows' GetPrivateProfileString/WritePrivateProfileString (op elk platform) |
 | `src/video.c` | digitale video: AVI-parser en eigen Cinepak-decoder (ABC-spel), geluidsspoor via de mixer |
 | `src/pack.c` | spelbestanden achter de exe (één exe, zie hieronder); echte bestanden gaan voor |
-| `src/disc.c` | spelbestanden vinden, BIN/CUE/ISO uitpakken (ook een BIN zonder CUE), `start.dxr` uit `SETUP.EXE` |
+| `src/disc.c` | spelbestanden vinden, BIN/CUE/ISO/CloneCD-IMG uitpakken (ook een BIN zonder CUE), `start.dxr` uit `START32.EXE` of `SETUP.EXE` |
 | `src/sound.c` | mixer (waveOut op Windows, SDL elders), CD-audio rechtstreeks uit `SKIPPER_1.BIN` via de `.CUE` |
 | `src/main.c` | start, hoofdlus, invoerwachtrij, transities, opening overslaan, headless testmodus (virtuele klok) |
 | `src/host_win.c`, `src/host_sdl.c` | venster, invoer, cursors, meldingen, bestandskiezer, afdrukken: Win32 / SDL2 |
@@ -155,6 +173,8 @@ Semantiek die uit het spel bleek (en die de port nodig had):
 - Editable velden (textFlags bit 0): toetsen gaan eerst naar het sprite-script van het veld; alleen wat
   niet afgevangen wordt (of `pass` doet) komt in het veld. `set the textFont of field` is get/set-type 11.
 - Digitale video: registratiepunt in het midden; `movieTime`/`duration` in ticks.
+- Tekenreeksen in de scripts staan in Mac Roman (op een Mac gecompileerd), de teksten in de casts in Windows-1252;
+  de port zet de scripttekenreeksen bij het laden om, zoals de Windows-projector (`src/dfile.c`).
 
 ```bash
 ./build.sh                                   # out/skipper.exe (debug-build met UBSan + PDB)
@@ -167,6 +187,7 @@ OPT=-O0 DEFS=-DDBGHEAP ./build.sh            # met debug-heap
 ./out/skipper.exe extract --click 320 240 170 --click 320 393 300 --drag 100 350 150 450 420 --shot 520 out/coin --dump
 python tools/filmstrip.py out/run out/strip.png 6
 sh tools/regress.sh                          # regressietest: 11 minigames + brievenbus/munt/baas/opslaan/emmer
+DATA=releases/no/files sh tools/regress.sh   # hetzelfde op de Scandinavische cd (map met de uitgepakte cd)
 ```
 Opslag (INI's, spelposities): `%APPDATA%\SkipperRE`.
 
@@ -194,6 +215,8 @@ letters). De WAV's (PCM 8/16-bit) staan in `%APPDATA%\SkipperRE\WAV\`.
 ```bash
 pip install pillow
 python tools/iso.py extract                              # (pad naar SKIPPER_1.BIN staat in het script)
+python tools/discx.py <image> <map>                      # elk image (ISO, BIN, CloneCD IMG; Joliet) uitpakken
+python tools/reldiff.py extract releases/no/files        # twee cd's bestand voor bestand vergelijken
 python tools/rifx.py extract/Magnus.dxr                  # chunks + castoverzicht
 python tools/lingodis.py --out out/lingo extract/*.dxr extract/*.cxt
 python tools/lingodis.py --stats extract/*.dxr extract/*.cxt

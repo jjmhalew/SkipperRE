@@ -56,12 +56,13 @@ static Movie *movie_get(const char *name) {
     static const char *exts[] = {".dxr", ".DXR", ".Dxr", ".dir", ".DIR", NULL};
     char path[260];
     Movie *mv = NULL;
-    /* datamap, en daarna de opslagmap (daar komt start.dxr als de datamap een cd is) */
+    /* datamap, en daarna de opslagmap (daar komt start.dxr als de datamap een cd is, als P.start_name) */
     const char *dirs[2] = {P.base_dir, P.save_dir};
     for (int d = 0; d < 2 && !mv; d++)
         for (int i = 0; exts[i] && !mv && dirs[d][0]; i++) {
-            snprintf(path, sizeof path, "%s/%s%s", dirs[d], key, exts[i]);
-            if (vfs_exists(path)) mv = movie_load(path);
+            const char *k = d == 1 && !_stricmp(key, "start") && P.start_name[0] ? P.start_name : key;
+            snprintf(path, sizeof path, "%s/%s%s", dirs[d], k, exts[i]);
+            if (vfs_exists(path) && (mv = movie_load(path)) && k != key) snprintf(mv->name, sizeof mv->name, "start");
         }
     if (!mv) { vm_error("film niet gevonden: %s", name); return NULL; }
     if (g_nmovies < 64) {

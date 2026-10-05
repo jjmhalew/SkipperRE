@@ -1,9 +1,10 @@
 /* Spelbestanden vinden zonder handwerk:
  *   - datamap met Magnus.dxr (argument, extract\ naast de exe of in de repo, %APPDATA%\SkipperRE\data)
  *   - een cd-station met de cd erin
- *   - een cd-image (BIN/CUE of ISO): de datatrack wordt eenmalig uitgepakt naar %APPDATA%\SkipperRE\data
- * en de opstartfilm start.dxr, die alleen in de projector start32.exe zit, die op zijn beurt als
- * deflate-stroom in de Wise-installer SETUP.EXE zit.
+ *   - een cd-image (BIN/CUE, ISO of CloneCD IMG/CCD): de datatrack wordt eenmalig uitgepakt naar
+ *     %APPDATA%\SkipperRE\data
+ * en de opstartfilm start.dxr, die alleen in de projector START32.EXE zit: los op de Scandinavische cd, op de
+ * Nederlandse als deflate-stroom in de Wise-installer SETUP.EXE.
  *
  * Eigen inflate (RFC 1951, canonieke Huffman-decodering), eigen ISO9660-lezer; geen bibliotheken. */
 #include "dir.h"
@@ -251,11 +252,19 @@ static int projector_start(const uint8_t *exe, size_t n, const char *dst) {
     return 0;
 }
 
-int disc_make_start(const char *setup_exe, const char *dst) {
+/* start.dxr uit de projector in de datamap halen: START32.EXE (Scandinavische cd) of, ingepakt, SETUP.EXE (Nederlandse
+ * cd; zijn START32.EXE is een lader zonder film) */
+int disc_make_start(const char *dir, const char *dst) {
+    char p[PLAT_PATH];
     size_t n;
-    uint8_t *b = read_file(setup_exe, &n);
+    snprintf(p, sizeof p, "%s\\START32.EXE", dir);
+    uint8_t *b = read_file(p, &n);
+    int ok = b && projector_start(b, n, dst);
+    free(b);
+    if (ok) return 1;
+    snprintf(p, sizeof p, "%s\\SETUP.EXE", dir);
+    b = read_file(p, &n);
     if (!b) return 0;
-    int ok = 0;
     /* Wise: losse deflate-stromen; zoek de stroom die uitpakt tot een exe met een Director-projector */
     for (size_t o = 0; o + 16 < n && !ok; o++) {
         uint8_t *head;
@@ -398,7 +407,11 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
         if (cue_data_track(cue, bin, sizeof bin, &start, &im.hdr)) im.raw = 1;
         else if (!_stricmp(strrchr(image, '.'), ".bin")) snprintf(bin, sizeof bin, "%s", image);   /* BIN zonder CUE */
         else return 0;
-    } else snprintf(bin, sizeof bin, "%s", image);   /* .iso (of een geopend bestand zonder naam): 2048-byte sectoren */
+    } else if (dot && !_stricmp(dot, ".ccd")) {   /* CloneCD: de sectoren staan in de .img ernaast */
+        strcpy(dot, ".img");
+        if (!file_exists(cue)) strcpy(dot, ".IMG");
+        snprintf(bin, sizeof bin, "%s", cue);
+    } else snprintf(bin, sizeof bin, "%s", image);   /* .iso, .img (of een geopend bestand zonder naam) */
     im.f = img_open(bin);
     if (!im.f) return 0;
     uint8_t pvd[2048];
@@ -436,6 +449,13 @@ static int has_game(const char *dir) {
     return file_exists(p);
 }
 
+int disc_nordic(const char *dir) {
+    char p[600], q[600];
+    snprintf(p, sizeof p, "%s\\MAGNUSDK.CXT", dir);
+    snprintf(q, sizeof q, "%s\\MagnusNL.cxt", dir);
+    return vfs_exists(p) && !vfs_exists(q);   /* ook in een exe met ingepakte bestanden */
+}
+
 /* Zoekt de spelbestanden. data = wat de gebruiker opgaf (of "extract"), image = --bin/--image (of "").
  * Schrijft de gevonden map in out; bin_out krijgt het BIN-pad als dat bekend wordt (CD-audio). */
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin) {
@@ -465,9 +485,9 @@ int disc_find_data(const char *data, const char *image, const char *appdir, char
         if (has_game(cds[i])) { snprintf(out, n, "%s", cds[i]); return 1; }
     /* een .cue of .iso naast de exe, in de werkmap of een map hoger */
     char img[PLAT_PATH];
-    const char *dirs[] = {exedir, ".", ".."}, *exts[] = {".cue", ".iso"};
+    const char *dirs[] = {exedir, ".", ".."}, *exts[] = {".cue", ".iso", ".ccd"};
     for (int i = 0; i < 3; i++)
-        for (int e = 0; e < 2; e++) {
+        for (int e = 0; e < 3; e++) {
             char full[PLAT_PATH];
             plat_full_path(dirs[i], full, sizeof full);
             if (plat_find_ext(full, exts[e], img, sizeof img) && disc_extract(img, appdata, bin_out, nbin) && has_game(appdata)) {
@@ -484,7 +504,8 @@ int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_o
         if (has_game(pick)) { snprintf(out, n, "%s", pick); return 1; }
         char img[PLAT_PATH];   /* een map met een image erin */
         if (!plat_find_ext(pick, ".cue", img, sizeof img) && !plat_find_ext(pick, ".iso", img, sizeof img) &&
-            !plat_find_ext(pick, ".bin", img, sizeof img))
+            !plat_find_ext(pick, ".ccd", img, sizeof img) && !plat_find_ext(pick, ".bin", img, sizeof img) &&
+            !plat_find_ext(pick, ".img", img, sizeof img))
             return 0;
         return disc_use(img, appdir, out, n, bin_out, nbin);
     }

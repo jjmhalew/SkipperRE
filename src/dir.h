@@ -340,6 +340,7 @@ typedef struct Player {
     int stage_color;
     char base_dir[260];
     char save_dir[260];
+    char start_name[16];   /* opstartfilm in de opslagmap: "start", of "start_nordic" bij de Scandinavische cd */
     char bin_path[260];
     int trans_pending, trans_type, trans_dur, trans_chunk;
     int cursor;
@@ -384,7 +385,8 @@ void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int ty
 void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s);   /* op schaal s */
 int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintOMatic-document is */
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
-int disc_make_start(const char *setup_exe, const char *dst);
+int disc_make_start(const char *dir, const char *dst);   /* start.dxr uit START32.EXE of SETUP.EXE in dir */
+int disc_nordic(const char *dir);   /* 1: de Scandinavische cd (Deens, Noors, Zweeds, Fins), 0: de Nederlandse */
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
 int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_out, int nbin);   /* gekozen image of map */
 int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen);
@@ -447,6 +449,12 @@ int host_open(int scale, int fullscreen);
 void host_events(void);        /* OS-berichten -> input_push */
 void host_blit(const uint32_t *px, int w, int h);   /* beeld tonen: 640x480, of groter met een texture pack */
 void host_message(const char *text, int warn);
+void host_locale(char *out, int n);   /* taal van het systeem als ISO 639-code ("da"), of "" */
+/* main.c: de eigen meldingen van de speler zijn Nederlands op een Nederlands systeem, anders Engels (voor de
+ * Scandinavische cd); het spel zelf spreekt de taal van de cd */
+int ui_nl(void);
+extern const char *g_title;   /* venstertitel: "Skipper & Skeeto in Pretpark", of de naam op de Scandinavische cd */
+#define UI(nl, en) (ui_nl() ? (nl) : (en))
 int host_pick_data(char *out, int n); /* cd-image of map kiezen; 0 = geannuleerd */
 void host_crash_init(void);
 int ld_save_game(int is_load);        /* slotkeuze; 0 = annuleren */

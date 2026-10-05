@@ -19,6 +19,13 @@ void host_message(const char *text, int warn) {
     if (!g_headless) MessageBoxA(g_hwnd, text, "Skipper & Skeeto", MB_OK | (warn ? MB_ICONWARNING : MB_ICONINFORMATION));
 }
 
+/* taal van Windows ("da", "sv", ...): de weergavetaal, anders die van de landinstellingen */
+void host_locale(char *out, int n) {
+    LCID id = MAKELCID(GetUserDefaultUILanguage(), SORT_DEFAULT);
+    if (!GetLocaleInfoA(id, LOCALE_SISO639LANGNAME, out, n) && !GetLocaleInfoA(LOCALE_USER_DEFAULT, LOCALE_SISO639LANGNAME, out, n))
+        out[0] = 0;
+}
+
 /* Afdrukken (PrintOMatic in het tekenspel): Windows-printdialoog, plaatje zo groot mogelijk binnen
  * marges van 1 inch, liggend als het spel dat vraagt. Headless: BMP in de opslagmap. */
 void host_print(const uint32_t *px, int w, int h, int landscape, const char *name) {
@@ -177,19 +184,26 @@ int ld_save_game(int is_load) {
 int host_pick_data(char *out, int n) {
     if (g_headless) return 0;
     if (MessageBoxA(NULL,
-                    "De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
-                    "Stop de cd in het cd-station, of kies hierna een image van de cd (.cue, .bin of .iso), "
-                    "of Magnus.dxr op de cd of in een map met de bestanden van de cd.\n\n"
-                    "Een image wordt eenmalig uitgepakt naar %APPDATA%\\SkipperRE\\data.",
+                    UI("De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
+                       "Stop de cd in het cd-station, of kies hierna een image van de cd (.cue, .bin, .iso of .img), "
+                       "of Magnus.dxr op de cd of in een map met de bestanden van de cd.\n\n"
+                       "Een image wordt eenmalig uitgepakt naar %APPDATA%\\SkipperRE\\data.",
+                       "The game files of Skipper & Skeeto (Magnus & Myggen) were not found.\n\n"
+                       "Put the CD in the drive, or choose an image of the CD next (.cue, .bin, .iso or .img), "
+                       "or Magnus.dxr on the CD or in a folder with the files of the CD.\n\n"
+                       "An image is unpacked once to %APPDATA%\\SkipperRE\\data."),
                     "Skipper & Skeeto", MB_OKCANCEL | MB_ICONINFORMATION) != IDOK)
         return 0;
     char file[MAX_PATH] = "";
     OPENFILENAMEA of = {0};
     of.lStructSize = sizeof of;
-    of.lpstrFilter = "Cd-image of Magnus.dxr (*.cue;*.bin;*.iso;Magnus.dxr)\0*.cue;*.bin;*.iso;Magnus.dxr\0Alle bestanden\0*.*\0";
+    of.lpstrFilter = UI("Cd-image of Magnus.dxr (*.cue;*.bin;*.iso;*.img;*.ccd;Magnus.dxr)\0*.cue;*.bin;*.iso;*.img;*.ccd;Magnus.dxr\0"
+                        "Alle bestanden\0*.*\0",
+                        "CD image or Magnus.dxr (*.cue;*.bin;*.iso;*.img;*.ccd;Magnus.dxr)\0*.cue;*.bin;*.iso;*.img;*.ccd;Magnus.dxr\0"
+                        "All files\0*.*\0");
     of.lpstrFile = file;
     of.nMaxFile = sizeof file;
-    of.lpstrTitle = "Skipper & Skeeto: cd-image of Magnus.dxr kiezen";
+    of.lpstrTitle = UI("Skipper & Skeeto: cd-image of Magnus.dxr kiezen", "Skipper & Skeeto: choose a CD image or Magnus.dxr");
     of.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
     if (!GetOpenFileNameA(&of)) return 0;
     char *sl = strrchr(file, '\\');
@@ -433,7 +447,7 @@ int host_open(int scale, int fullscreen) {
     }
     RECT r = {0, 0, 640 * scale, 480 * scale};
     AdjustWindowRect(&r, style, FALSE);
-    g_hwnd = CreateWindowA("SkipperRE", "Skipper & Skeeto in Pretpark", style, CW_USEDEFAULT, CW_USEDEFAULT,
+    g_hwnd = CreateWindowA("SkipperRE", g_title, style, CW_USEDEFAULT, CW_USEDEFAULT,
                            r.right - r.left, r.bottom - r.top, NULL, NULL, wc.hInstance, NULL);
     if (!g_hwnd) return 0;
     layout();

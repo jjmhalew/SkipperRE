@@ -68,6 +68,60 @@ static void setup_save_dir(void) {
     }
 }
 
+/* De Scandinavische cd heeft spraak en tekst in vier talen; start.dxr leest de keuze uit MAGNUS.INI [Language] Speak /
+ * Text (DK, N, S, SF; het installatieprogramma schreef die, de instellingendialoog van het spel past ze aan). Bij de
+ * eerste start komt de taal van het systeem erin (anders Deens, zoals start.dxr zelf), --lang zet hem altijd. */
+int ui_nl(void) {
+    static int v = -1;
+    if (v < 0) {
+        char l[64] = "";
+        host_locale(l, sizeof l);
+        v = !_strnicmp(l, "nl", 2);
+    }
+    return v;
+}
+
+static const char *lang_code(const char *s) {
+    static const struct { const char *in, *code; } map[] = {
+        {"DK", "DK"}, {"da", "DK"}, {"N", "N"}, {"no", "N"}, {"nb", "N"}, {"nn", "N"},
+        {"S", "S"}, {"sv", "S"}, {"SF", "SF"}, {"fi", "SF"},
+    };
+    for (int i = 0; i < (int)(sizeof map / sizeof *map); i++) {
+        size_t n = strlen(map[i].in);
+        if (!_strnicmp(s, map[i].in, n) && (!s[n] || s[n] == '_' || s[n] == '-' || s[n] == '.')) return map[i].code;
+    }
+    return NULL;
+}
+
+static void setup_language(const char *want) {
+    char f[600], cur[16];
+    snprintf(f, sizeof f, "%s\\MAGNUS.INI", P.save_dir);
+    const char *code = want ? lang_code(want) : NULL;
+    if (want && !code) fprintf(stderr, "[taal] onbekend: %s (DK, N, S of SF)\n", want);
+    if (!code) {
+        if (ini_get(f, "Language", "Speak", "", cur, sizeof cur)) return;   /* al gekozen */
+        char loc[64] = "";
+        host_locale(loc, sizeof loc);
+        code = lang_code(loc);
+        fprintf(stderr, "[taal] systeemtaal %s -> %s\n", loc[0] ? loc : "?", code ? code : "DK");
+        if (!code) code = "DK";
+    }
+    ini_set(f, "Language", "Speak", code);
+    ini_set(f, "Language", "Text", code);
+}
+
+/* venstertitel: de naam van het spel in zijn teksttaal */
+const char *g_title = "Skipper & Skeeto in Pretpark";
+
+static void set_title(void) {
+    char f[600], t[16];
+    snprintf(f, sizeof f, "%s\\MAGNUS.INI", P.save_dir);
+    ini_get(f, "Language", "Text", "DK", t, sizeof t);
+    const char *c = lang_code(t);
+    g_title = !c || !strcmp(c, "DK") ? "Magnus og Myggen" : !strcmp(c, "N") ? "Magnus & Myggen"
+            : !strcmp(c, "S") ? "Magnus och Myggan" : "Manu ja Matti";
+}
+
 /* ------------------------------------------------------------------ venster-hulp */
 /* podium-rechthoek in een venster van cw x ch: zo groot mogelijk in 4:3, gecentreerd; een geheel veelvoud als dat
  * bijna past (scherpere pixels) */
@@ -254,7 +308,7 @@ int main(int argc, char **argv) {
     android_init();   /* stderr naar skipper.log in de app-map */
 #endif
     host_crash_init();
-    const char *data = "extract", *movie = "start", *shot = NULL;
+    const char *data = "extract", *movie = "start", *shot = NULL, *lang = NULL;
     int shot_frames = 0, scale = 0, fullscreen = 0, dumptex = 0, hd = 0;
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
     int drags[16][5], ndrags = 0;
@@ -265,6 +319,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--movie") && i + 1 < argc) movie = argv[++i];
         else if (!strcmp(argv[i], "--bin") && i + 1 < argc) snprintf(bin, sizeof bin, "%s", argv[++i]);
+        else if (!strcmp(argv[i], "--lang") && i + 1 < argc) lang = argv[++i];
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--fullscreen")) fullscreen = 1;
         else if (!strcmp(argv[i], "--dumptex")) dumptex = 1;
@@ -329,13 +384,18 @@ int main(int argc, char **argv) {
         int ok = 0;
         while (!ok && host_pick_data(pick, sizeof pick)) {
             ok = disc_use(pick, appdir, full, sizeof full, binfound, sizeof binfound);
-            if (!ok) host_message("Daarin zijn de spelbestanden van Skipper & Skeeto niet gevonden.", 1);
+            if (!ok) host_message(UI("Daarin zijn de spelbestanden van Skipper & Skeeto niet gevonden.",
+                                     "The game files of Skipper & Skeeto (Magnus & Myggen) are not in there."), 1);
         }
         if (!ok) {
-            const char *msg = "De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
-                              "Stop de cd in het cd-station, of start met:\n"
-                              "  skipper <map met Magnus.dxr>\n"
-                              "  skipper --bin <pad naar SKIPPER_1.BIN, .CUE of .ISO>";
+            const char *msg = UI("De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
+                                 "Stop de cd in het cd-station, of start met:\n"
+                                 "  skipper <map met Magnus.dxr>\n"
+                                 "  skipper --bin <pad naar SKIPPER_1.BIN, .CUE, .ISO of .IMG>",
+                                 "The game files of Skipper & Skeeto (Magnus & Myggen) were not found.\n\n"
+                                 "Put the CD in the drive, or start with:\n"
+                                 "  skipper <folder with Magnus.dxr>\n"
+                                 "  skipper --bin <path to the CD image: .CUE, .BIN, .ISO or .IMG>");
             if (g_headless) fprintf(stderr, "%s\n", msg);
             else host_message(msg, 1);
             return 1;
@@ -343,15 +403,19 @@ int main(int argc, char **argv) {
     }
     player_init(full);
     setup_save_dir();
+    int nordic = disc_nordic(full);
+    if (nordic) { setup_language(lang); set_title(); }
+    else if (lang) fprintf(stderr, "[taal] --lang %s: deze cd is alleen Nederlands\n", lang);
     texpack_init(dumptex, hd);
-    /* de opstartfilm zit alleen in de projector in SETUP.EXE: eenmalig naar de opslagmap halen */
-    char sd[PLAT_PATH], sd2[PLAT_PATH], setup[PLAT_PATH];
+    /* de opstartfilm zit alleen in een projector (START32.EXE, of die in SETUP.EXE): eenmalig naar de opslagmap halen,
+     * per cd onder een eigen naam (de Nederlandse en de Scandinavische start.dxr verschillen in de taalkeuze) */
+    snprintf(P.start_name, sizeof P.start_name, nordic ? "start_nordic" : "start");
+    char sd[PLAT_PATH], sd2[PLAT_PATH];
     snprintf(sd, sizeof sd, "%s\\start.dxr", full);
-    snprintf(sd2, sizeof sd2, "%s\\start.dxr", P.save_dir);
-    snprintf(setup, sizeof setup, "%s\\SETUP.EXE", full);
+    snprintf(sd2, sizeof sd2, "%s\\%s.dxr", P.save_dir, P.start_name);
     if (!vfs_exists(sd) && !vfs_exists(sd2)) {
-        fprintf(stderr, "[disc] start.dxr uit SETUP.EXE halen ...\n");
-        if (!disc_make_start(setup, sd2)) fprintf(stderr, "[disc] start.dxr niet gevonden in %s\n", setup);
+        fprintf(stderr, "[disc] start.dxr uit START32.EXE of SETUP.EXE halen ...\n");
+        if (!disc_make_start(full, sd2)) fprintf(stderr, "[disc] start.dxr niet gevonden in %s\n", full);
     }
     if (binfound[0]) snprintf(bin, sizeof bin, "%s", binfound);
     if (!bin[0]) snprintf(bin, sizeof bin, "%s\\..\\SKIPPER_1.BIN", full);

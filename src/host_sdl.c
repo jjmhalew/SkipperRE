@@ -25,6 +25,14 @@ void touch_draw(SDL_Renderer *r);
 int touch_event(SDL_Event *e, SDL_Window *win, SDL_Renderer *r);
 #endif
 
+/* taal van het systeem ("da", "sv", ...): SDL leest LANG / LC_ALL, op Android de taal van het toestel */
+void host_locale(char *out, int n) {
+    out[0] = 0;
+    SDL_Locale *l = SDL_GetPreferredLocales();
+    if (l && l[0].language) snprintf(out, n, "%s", l[0].language);
+    SDL_free(l);
+}
+
 void host_message(const char *text, int warn) {
     fprintf(stderr, "%s\n", text);
 #ifdef __ANDROID__
@@ -51,7 +59,8 @@ void host_print(const uint32_t *px, int w, int h, int landscape, const char *nam
     int ok = stbi_write_png(path, w, h, 3, rgb, w * 3);
     free(rgb);
     char msg[PLAT_PATH + 100];
-    snprintf(msg, sizeof msg, ok ? "%s is bewaard als\n%s" : "%s kon niet worden bewaard als\n%s", name, path);
+    snprintf(msg, sizeof msg, ok ? UI("%s is bewaard als\n%s", "%s was saved as\n%s")
+                                 : UI("%s kon niet worden bewaard als\n%s", "%s could not be saved as\n%s"), name, path);
     host_message(msg, !ok);
 }
 
@@ -70,18 +79,23 @@ int host_pick_data(char *out, int n) {
 #ifdef __ANDROID__
     return android_pick_data(out, n);
 #else
-    if (!ask("De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
-             "Kies hierna een image van de cd (.cue, .bin of .iso), of Magnus.dxr op de gemounte cd of in een map met "
-             "de bestanden van de cd. Een image wordt eenmalig uitgepakt naar ~/.local/share/SkipperRE/data.",
-             "Kiezen", "Stoppen"))
+    if (!ask(UI("De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
+                "Kies hierna een image van de cd (.cue, .bin, .iso of .img), of Magnus.dxr op de gemounte cd of in een "
+                "map met de bestanden van de cd. Een image wordt eenmalig uitgepakt naar ~/.local/share/SkipperRE/data.",
+                "The game files of Skipper & Skeeto (Magnus & Myggen) were not found.\n\n"
+                "Choose an image of the CD next (.cue, .bin, .iso or .img), or Magnus.dxr on the mounted CD or in a "
+                "folder with the files of the CD. An image is unpacked once to ~/.local/share/SkipperRE/data."),
+             UI("Kiezen", "Choose"), UI("Stoppen", "Quit")))
         return 0;
+#define EXTS "*.cue *.CUE *.bin *.BIN *.iso *.ISO *.img *.IMG *.ccd *.CCD Magnus.dxr MAGNUS.DXR"
     const char *cmds[] = {
-        "zenity --file-selection --title='Skipper & Skeeto: cd-image of Magnus.dxr' "
-        "--file-filter='Cd-image of Magnus.dxr | *.cue *.CUE *.bin *.BIN *.iso *.ISO Magnus.dxr MAGNUS.DXR' "
-        "--file-filter='Alle bestanden | *' 2>/dev/null",
-        "kdialog --title 'Skipper & Skeeto' --getopenfilename . "
-        "'*.cue *.CUE *.bin *.BIN *.iso *.ISO Magnus.dxr MAGNUS.DXR' 2>/dev/null",
+        ui_nl() ? "zenity --file-selection --title='Skipper & Skeeto: cd-image of Magnus.dxr' "
+                  "--file-filter='Cd-image of Magnus.dxr | " EXTS "' --file-filter='Alle bestanden | *' 2>/dev/null"
+                : "zenity --file-selection --title='Skipper & Skeeto: CD image or Magnus.dxr' "
+                  "--file-filter='CD image or Magnus.dxr | " EXTS "' --file-filter='All files | *' 2>/dev/null",
+        "kdialog --title 'Skipper & Skeeto' --getopenfilename . '" EXTS "' 2>/dev/null",
     };
+#undef EXTS
     for (int i = 0; i < 2; i++) {
         char probe[64];
         snprintf(probe, sizeof probe, "command -v %s >/dev/null 2>&1", i ? "kdialog" : "zenity");
@@ -99,8 +113,10 @@ int host_pick_data(char *out, int n) {
         snprintf(out, n, "%s", line);
         return 1;
     }
-    host_message("Er is geen bestandskiezer (zenity of kdialog) gevonden. Start skipper met de map of het image:\n"
-                 "  skipper <map met Magnus.dxr>\n  skipper --bin <SKIPPER_1.CUE, .BIN of .ISO>", 1);
+    host_message(UI("Er is geen bestandskiezer (zenity of kdialog) gevonden. Start skipper met de map of het image:\n"
+                    "  skipper <map met Magnus.dxr>\n  skipper --bin <SKIPPER_1.CUE, .BIN, .ISO of .IMG>",
+                    "No file chooser (zenity or kdialog) was found. Start skipper with the folder or the image:\n"
+                    "  skipper <folder with Magnus.dxr>\n  skipper --bin <CD image: .CUE, .BIN, .ISO or .IMG>"), 1);
     return 0;
 #endif
 }
@@ -364,7 +380,7 @@ int host_open(int scale, int fullscreen) {
 #ifdef __ANDROID__
     fl |= SDL_WINDOW_FULLSCREEN;
 #endif
-    g_win = SDL_CreateWindow("Skipper & Skeeto in Pretpark", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    g_win = SDL_CreateWindow(g_title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
                              640 * scale, 480 * scale, fl);
     if (!g_win) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     SDL_SetWindowMinimumSize(g_win, 320, 240);

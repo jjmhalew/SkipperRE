@@ -121,6 +121,24 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [ ] Optional: a "Liedjes" menu for the 15 CD-audio songs (the original `Liedjes.exe` is a separate
       launcher; `src/sound.c` can already play CD audio from the BIN).
 
+## Other releases (docs/RELEASES.md)
+
+- [x] **Nordic CD** (*Magnus & Myggen*, Danish / Norwegian / Swedish / Finnish, Director 5): `start.dxr` from
+      `START32.EXE` (cached as `start_nordic.dxr`), `MAGNUS.INI` [Language] from the system language or `--lang`,
+      CloneCD `.img`/`.ccd`, window title and Android buttons in the game's text language, port messages in English
+      unless the system is Dutch. Regression 16/16 on Windows and Linux; extraction from the archive.org image tested;
+      single exe tested; Android emulator: Swedish buttons, switching the text language in the F7 screen relabels them.
+      *(nobody has played it through)*
+- [x] **Lingo string literals are Mac Roman** (both CDs): converted to Windows-1252 at load (`src/dfile.c`). Fixes the
+      Nordic dialog texts and the ABC letters; for the Dutch CD it changes the case table of MMB10 (check typing
+      é/ë in the spelling game).
+- [x] Dutch 2003 re-release: same game files as 1997, works unchanged.
+- [ ] Danish 1996 first release (Director 4, `MAGNUS0/1.DXR`, main movie inside `MAGNUS.EXE`): needs a Director 4
+      reader. Low priority: the Danish version is on the Nordic CD.
+- [ ] *Superstarter* re-releases (Danish 2006 Director 8.5, Swedish Director 10; InstallShield cabs): need cab
+      extraction and the Director 8.5/10 formats. Low priority for the same reason.
+- [ ] Android app name per system language (*Magnus & Myggen* etc.)?
+
 ## Out of scope
 
 - The catalog/demos (`Catalog/`, `Transpos.exe`, `Launcher.exe`, HTML order forms), `SETUP.EXE`, `VFW/`

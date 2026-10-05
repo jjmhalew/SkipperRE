@@ -6,7 +6,8 @@
  * Standaard: out\skipper.exe + extract\, data\ of %APPDATA%\SkipperRE\data -> SkipperRE-standalone.exe.
  * Alleen wat het spel gebruikt gaat mee: films (.dxr), casts (.cxt), het icoon en .ini's uit de hoofdmap plus Video\;
  * niet de Catalog-map, de installers en de 16-bit DLL's. start.dxr komt uit de datamap of uit de opslagmap
- * %APPDATA%\SkipperRE (die haalt skipper.exe bij de eerste start uit SETUP.EXE).
+ * %APPDATA%\SkipperRE (die haalt skipper.exe bij de eerste start uit START32.EXE of SETUP.EXE; van de Scandinavische
+ * cd heet hij daar start_nordic.dxr).
  * Bouwen (doet build.bat standalone): zig cc -std=c99 -O2 -o out\pack.exe tools\pack.c */
 #include <windows.h>
 #include <stdio.h>
@@ -107,17 +108,20 @@ int main(int argc, char **argv) {
     char vid[2 * MAX_PATH];
     snprintf(vid, sizeof vid, "%s\\Video", data);
     list(vid, "Video\\", 0);
-    if (!start) {   /* de opstartfilm staat in de opslagmap */
+    if (!start) {   /* de opstartfilm staat in de opslagmap, van de Scandinavische cd als start_nordic.dxr */
         const char *dirs[] = {app, NULL};
-        char save[2 * MAX_PATH], p[2 * MAX_PATH];
+        char save[2 * MAX_PATH], p[2 * MAX_PATH], dk[2 * MAX_PATH], nl[2 * MAX_PATH];
         snprintf(save, sizeof save, "%s\\save", app);
         dirs[1] = save;
+        snprintf(dk, sizeof dk, "%s\\MAGNUSDK.CXT", data);
+        snprintf(nl, sizeof nl, "%s\\MagnusNL.cxt", data);
+        const char *name = exists(dk) && !exists(nl) ? "start_nordic.dxr" : "start.dxr";
         for (int i = 0; i < 2 && !start; i++) {
-            snprintf(p, sizeof p, "%s\\start.dxr", dirs[i]);
+            snprintf(p, sizeof p, "%s\\%s", dirs[i], name);
             if (exists(p)) { add("start.dxr", p); start = 1; }
         }
         if (!start) {
-            fprintf(stderr, "pack: start.dxr niet gevonden: start skipper.exe eerst een keer (die haalt hem uit SETUP.EXE)\n");
+            fprintf(stderr, "pack: start.dxr niet gevonden: start skipper.exe eerst een keer (die haalt hem uit START32.EXE of SETUP.EXE)\n");
             return 1;
         }
     }
