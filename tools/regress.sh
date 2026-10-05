@@ -50,5 +50,7 @@ SHOT=900 check boss "gCurrentLoc = #E6" $INTRO --click 320 393 300 --click 320 3
 E2="--click 320 393 300 --click 615 200 400 --click 400 180 500 --click 200 125 600 --click 170 160 700"
 SHOT=950 check bucket "ch 35. 1:49 BucketS" $INTRO $E2 --drag 552 385 60 450 800 &
 SHOT=360 check savedlg "van Magnus" $INTRO --key 97 0 300 &
+# spelling (MMB10): een letter aanklikken zet hem in zijn vakje (the clickOn van een moveable sprite)
+SHOT=960 check spelling 'gDroppedSprites = \[.*"P"' $INTRO --click 439 115 300 --click 90 450 700 --click 277 185 920 &
 wait
 exit $FAIL
