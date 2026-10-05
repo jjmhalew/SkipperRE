@@ -7,7 +7,7 @@ Reconstrueert expressies uit de stackcode en herkent if/else en repeat-lussen. W
 past valt hij terug op commentaar met de opcode, zodat er nooit iets stil verdwijnt.
 In D5 zijn indices van locals/args/literals vermenigvuldigd met 8.
 """
-import sys, os, argparse
+import sys, os, re, argparse
 sys.path.insert(0, os.path.dirname(__file__))
 from rifx import RifxFile
 from lingodis import scripts_of, decode
@@ -209,6 +209,11 @@ class Dec:
             if op == 'endrepeat':
                 i += 1
                 continue
+            if op in ('ret', 'retfactory') and i < len(self.ins) - 1 and not (
+                    i > 0 and self.ins[i - 1][1] == 'extcall' and self.s.name(self.ins[i - 1][2]) == 'return'):
+                self.emit(depth, 'exit')   # ret midden in de handler (na `return x` staat er al een return)
+                i += 1
+                continue
             self.step(op, a, st, depth)
             i += 1
         for e in st:
@@ -284,7 +289,7 @@ class Dec:
         elif op == 'pushsymb':
             push(E('#' + name(), val=name()))
         elif op == 'pushvarref':
-            push(E(name(), val=name()))
+            push(E(name(), val=('varref', name())))
         elif op in ('getglobal', 'getglobal2', 'getprop'):
             push(E(name(), val=name()))
         elif op == 'getparam':
@@ -318,6 +323,22 @@ class Dec:
             c = self.call(hn, args)
             (self.emit(depth, c) if args.noret else push(E(c)))
         elif op == 'objcallv4':
+            top = st[-2] if a == 6 and len(st) >= 2 else st[-1] if st else None
+            if top is not None and isinstance(top.val, tuple) and top.val[0] == 'varref':
+                # D4-syntax f(var, ...): de functie staat in de varref, het eerste argument is de NAAM van een
+                # variabele (als symbool gecompileerd), zoals symbolp(gEffectNotify) in Speak
+                if a == 6:
+                    pop()
+                fn = pop().val[1]
+                args = pop()
+                al = list(args.args or [])
+                # behalve bij XObjects (INI(#mnew), File(#mReadLine)): daar is het symbool de methode
+                if (al and isinstance(al[0].val, str) and al[0].s == '#' + al[0].val
+                        and not re.match(r'm[A-Z]|mnew$|mdispose$', al[0].val)):
+                    al[0] = E(al[0].val)
+                c = f'{fn}({", ".join(map(str, al))})'
+                (self.emit(depth, c) if args.noret else push(E(c)))
+                return
             obj = self.var(st, a)
             args = pop()
             c = f'{obj}({", ".join(map(str, args.args or []))})'
@@ -364,8 +385,9 @@ class Dec:
             s_ = pop()
             push(self.chunk(st, s_))
         elif op == 'hilitechunk':
+            lib = pop()
             fld = pop()
-            self.emit(depth, f'hilite {self.chunk(st, E("field " + str(fld)))}')
+            self.emit(depth, f'hilite {self.chunk(st, E("field " + str(fld) + (f" of castLib {lib}" if str(lib) != "0" else "")))}')
         elif op == 'getfield':
             lib = pop()
             f = pop()
