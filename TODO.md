@@ -198,7 +198,12 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       score, Lingo and projector support, MMSYS/MMPRINT calls (docs/RELEASES.md section 4). Regression 17/17 on Windows
       and Linux, fuzzed, ISO install tested. *(nobody has played it through)*
 - [ ] *Superstarter* re-releases (Danish 2006 Director 8.5, Swedish Director 10; InstallShield cabs): need cab
-      extraction and the Director 8.5/10 formats. Low priority for the same reason.
+      extraction and the Director 8.5/10 formats. Low priority for the same reason. Looked at on 2026-10-05: plain RIFX
+      (no Afterburner) with `DRCF` (version 0x73a), `LctX`, sounds as `snd ` + `sndH` + `sndS`, the D6+ score layout;
+      Lscr handler records are 46 bytes (lingodis reads them now; the literal values still come out wrong), and the
+      scripts were rewritten for Xtras: Buddy API (`baReadIni`/`baWriteIni` instead of the INI XObject), FileIO and
+      PrintOMatic Xtras. So: unshield in C, D8 score/sound/literals and those Xtras: a project of its own, for content
+      that the Nordic CD already plays.
 - [x] Android app name per system language: *Magnus og Myggen* (da), *Magnus & Myggen* (nb/no), *Magnus och Myggan* (sv),
       *Manu ja Matti* (fi), otherwise *Skipper & Skeeto* (checked with `aapt dump badging`).
 

@@ -45,7 +45,7 @@ class Handler:
 
 
 class Script:
-    def __init__(self, b, names, esz=8):
+    def __init__(self, b, names, esz=8, hsz=42):
         self.names = names
         self.esz = esz  # operand van literals/args/locals: index x 8 (D5) of x 6 (D4)
         be = lambda f, o: struct.unpack_from('>' + f, b, o)
@@ -74,7 +74,7 @@ class Script:
         for i in range(hc):
             h = Handler()
             (h.name_id, h.vpos, h.clen, h.coff, ac, ao, lcnt, loff, gcnt, goff,
-             _u1, _u2, h.lines, h.loff) = be('hHIIHIHIHIIHHI', ho + i * 42)
+             _u1, _u2, h.lines, h.loff) = be('hHIIHIHIHIIHHI', ho + i * hsz)
             h.name = self.name(h.name_id)
             h.args = [self.name(x) for x in be('%dh' % ac, ao)] if ac else []
             h.locals = [self.name(x) for x in be('%dh' % lcnt, loff)] if lcnt else []
@@ -125,10 +125,13 @@ def decode(code):
 def scripts_of(rf):
     """Alle scripts in een bestand: [(lctx chunk id, index, Script)]."""
     res = []
-    esz = 8
-    for cf in rf.by_tag.get('VWCF', [])[:1]:  # Director 4 (versie < 0x4c1): literals van 6 bytes
-        if struct.unpack_from('>H', rf.chunk_data(cf), 36)[0] < 0x4c1:
+    esz, hsz = 8, 42
+    for cf in (rf.by_tag.get('VWCF', []) + rf.by_tag.get('DRCF', []))[:1]:
+        ver = struct.unpack_from('>H', rf.chunk_data(cf), 36)[0]
+        if ver < 0x4c1:  # Director 4: literals van 6 bytes
             esz = 6
+        if ver >= 0x700:  # Director 8.5 (0x73a): handler-records van 46 bytes
+            hsz = 46
     for lctx in rf.by_tag.get('Lctx', []) + rf.by_tag.get('LctX', []):
         b = rf.chunk_data(lctx)
         if len(b) < 36:  # lege context (cast zonder scripts)
@@ -141,7 +144,7 @@ def scripts_of(rf):
             _, sec, _, _ = struct.unpack_from('>iiHH', b, eoff + k * 12)
             if sec < 0 or sec >= len(rf.chunks) or rf.chunks[sec].tag != 'Lscr':
                 continue
-            res.append((lctx.id, k + 1, Script(rf.chunk_data(sec), names, esz)))
+            res.append((lctx.id, k + 1, Script(rf.chunk_data(sec), names, esz, hsz)))
     return res
 
 
