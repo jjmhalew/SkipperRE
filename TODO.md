@@ -43,23 +43,25 @@ Fixed:
 - [x] `the result` = return value of the last handler (mmdlg5 offered hints for items already in the pocket).
 - [x] `the volume of sound n` (per channel, 0-255): intro ducking, background music under speech, muted in the tutorial.
 
-Still open (found by the audit, not fixed yet):
-- [ ] **Credits are blank**: the `Credits` member in Magnus1 is richtext (type 12), which is never drawn. RTE1 has the
-      plain text, RTE2 a pre-rendered 624x443 image.
-- [ ] **End of Magnus1 freezes on the logos**: `StopGame` is the last (empty) frame 280; a projector quits at the end of
-      the score, `apply_go` clamps to the last frame instead. `halt` doesn't quit either.
-- [ ] Score sound channels never stop when their cell ends (Magnus1 `DrumLoop2` loops on through the ending).
-- [ ] Built-in palettes -101/-102 (Windows system palettes) are mapped to the Mac palette (`palette_lookup`): Magnus1
-      logos and the Mmtutor end screen.
-- [ ] MIAW: `the mouseH/V` (and the clickLoc) should be window-local (Mmdlg1 volume slider jumps ~168 px); windows get
-      no `idle` (Mmtutor's `on idle` hides the volume meter); window sprite cursors are ignored (`cursor_wanted`).
-- [ ] The Fmap parser never matches (entries start at `8 + be16(b+24)`, id at +6), so all text is Arial; Mac font 1
-      (Geneva) should map to MS Sans Serif. Field drop shadow (spec byte 24) is ignored (`Points`, save-slot numbers).
-- [ ] `puppetTransition` time 0 = 500 ms (should be fastest; score transitions use 100 ms); "changing area only" ignored.
-- [ ] `sound fadeOut` stops at once (Intro); film loops share one global phase (`g_loop_tick`).
-- [ ] Latent: `hilite chunk of field` is a no-op (and pops one operand too few), `delete line/item` keeps the
-      delimiter, `put into line N` past the end doesn't pad, `send()` is not a builtin, `the doubleClick` is always 0.
-- [ ] `tools/lingodec.py`: drops `exit` inside `if`, prints objcallv4 varrefs as symbols (`symbolp(#gEffectNotify)`).
+Second round (also fixed):
+- [x] **Credits**: the richtext `Credits` member in Magnus1 is drawn from its RTE2 image (alpha runs + colour codes, as
+      ScummVM decodes it) over the member's background; `the text` gives RTE1. Verified headless.
+- [x] **End of Magnus1**: running off the end of the stage's score quits, as a projector does (logos at tempo 2, then
+      StopGame); `halt` quits. A go past the end and dialog windows still stop on the last frame.
+- [x] A sound the score started stops when its sound cell ends (Magnus1 `DrumLoop2`); puppetSound/playFile take over.
+- [x] Built-in palettes: -101 = Windows system, -102 = Windows D5 (tables from ScummVM); the movie default palette (VWCF)
+      counts from 0, so -100 there is -101. Magnus1 logos and the Mmtutor end screen.
+- [x] MIAW: `the mouseH/V`, clickLoc, rollOver and mouseMember are window-local (Mmdlg1 slider track click verified);
+      windows get `idle`; window sprite cursors are shown from that window's cast.
+- [x] Fmap entries at offset 36 with the id at +6 (Courier New in Mmb02); unmapped font ids stay Arial. Field text drop
+      shadow (spec byte 24): `Points`, save-slot numbers.
+- [x] `puppetTransition` time 0 = fastest (100 ms); "changing area only" (score spec[3] bit 0 clear, 4th argument of
+      puppetTransition) runs the effect in the rectangle that changes.
+- [x] `sound fadeOut ch, ticks` fades in the mixer; film loops step once per score frame and per sprite.
+- [x] `hilite chunk of field` pops castLib + field + 8 (selection itself not drawn), `delete item/line/word` removes the
+      delimiter/spaces, `put into item/line N` pads, `the doubleClick` works. (`send()` was never missing: it is a movie
+      handler in Magnus.)
+- [x] `tools/lingodec.py`: `exit` inside handlers, f(variable) for D4-style calls, hilite operands.
 
 ## P1 — missing features
 
