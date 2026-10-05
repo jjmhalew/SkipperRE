@@ -63,6 +63,23 @@ Second round (also fixed):
       handler in Magnus.)
 - [x] `tools/lingodec.py`: `exit` inside handlers, f(variable) for D4-style calls, hilite operands.
 
+Third round (score/drawing, input/fields, sound/XObjects; fixed):
+- [x] Palette transitions in real time with D5's speed table (ScummVM `kFadeColorFramesD5`): `puppetPalette x, 60`
+      (every room change, the dialogs) is instant instead of a 2-frame blend over the new room; the intro fades in from
+      black (palette cell speed 28, about half a second, the frame waits for it).
+- [x] A frame without a palette cell uses the last palette cell before it in the score, also after a jump (Intro's
+      click to "IntroEnd" during one of the white flash frames).
+- [x] Shift, Ctrl, CapsLock etc. on their own send no keyDown/keyUp (MMB09 counted a lone Shift as a wrong letter);
+      numpad Enter is keyCode 36 on Linux/Android too (MMB02 answers).
+- [x] Mixer interpolates between samples (11/22 kHz sounds at 44.1 kHz without the harsh stair steps).
+- [x] INI XObject `mGetPrivateProfileString` honours its Size argument; DLLGlue `VkKeyScan` returns 65535 for "no key".
+- [ ] Open question: a name longer than the save dialog's `SaveText` field (about 10 letters) is clipped and the
+      slot label shows its end. Did D5 break the long word or scroll the field to the insertion point? Check in the
+      original if possible.
+- Not used by the game, left as they are: tempo waits/delays, trails, inks other than 0/8/9/32/36, shape types and
+  patterns (all shapes are invisible hotspots), score blend (only in an unreachable frame), fade to black/white and
+  colour cycling, timeouts, `selStart/selEnd`, markers, `play done`, ADPCM WAVs.
+
 ## P1 — missing features
 
 - [x] **Digital video (ABC game, MMB09).** *(done: `src/video.c`, own AVI parser + Cinepak decoder, audio track
