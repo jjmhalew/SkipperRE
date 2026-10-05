@@ -370,6 +370,7 @@ static void actor_step(void) {
 }
 
 static int g_last_snd[3];
+static int g_score_snd[3];   /* 1: wat op dit kanaal speelt kwam uit het geluidskanaal van de score */
 
 static void enter_frame(int first) {
     Movie *mv = CP->mv;
@@ -383,6 +384,11 @@ static void enter_frame(int first) {
             CP->ch[i].slib = fr->spr[i - 1].slib;
             CP->ch[i].script = fr->spr[i - 1].smember;
         }
+        /* filmloop: elke sprite loopt zijn eigen loop, één beeld per frame van de score; opnieuw bij een ander lid */
+        Channel *c = &CP->ch[i];
+        int id = c->lib << 16 | c->member;
+        if (id != c->loop_id) { c->loop_id = id; c->loop_frame = 0; }
+        else c->loop_frame++;
     }
     if (fr->tempo && fr->tempo <= 120) CP->tempo = fr->tempo;
     if (CP == &P) {
@@ -399,7 +405,11 @@ static void enter_frame(int first) {
             if (snd[ch] && snd[ch] != g_last_snd[ch]) {
                 CastLib *cl;
                 Member *m = movie_member(mv, lib[ch], snd[ch], &cl);
-                if (m && m->type == MT_SOUND) sound_play_member(ch, cl, m);
+                if (m && m->type == MT_SOUND) { sound_play_member(ch, cl, m); g_score_snd[ch] = 1; }
+            } else if (!snd[ch] && g_score_snd[ch]) {
+                /* de cel is afgelopen: een geluid dat de score startte stopt (Magnus1: DrumLoop2 na frame 164) */
+                sound_stop(ch);
+                g_score_snd[ch] = 0;
             }
             g_last_snd[ch] = snd[ch];
         }
@@ -411,6 +421,7 @@ static void enter_frame(int first) {
                 P.trans_chunk = m->spec[1];
                 P.trans_type = m->spec[2];
                 P.trans_dur = m->spec[4] << 8 | m->spec[5];
+                P.trans_area = !(m->spec[3] & 1);   /* bit 0 = hele podium, anders alleen wat verandert (ScummVM) */
                 if (P.trans_dur <= 0) P.trans_dur = 100;   /* 0 = zo snel mogelijk */
             }
         }
@@ -440,6 +451,7 @@ static void movie_switch(Movie *mv, int frame) {
         int dp = mv->def_pal <= 0 ? mv->def_pal - 1 : mv->def_pal;
         if (palette_lookup(mv, mv->def_pal_lib, dp, pal)) palette_set(pal, 0);
         g_last_snd[1] = g_last_snd[2] = 0;
+        g_score_snd[1] = g_score_snd[2] = 0;   /* een geluid uit de vorige film speelt gewoon uit */
         P.stage_color = mv->stage_color;
     }
     Frame *fr = cur_frame();
@@ -475,11 +487,16 @@ static void apply_go(void) {
             return;
         }
     }
-    int next = CP->going ? CP->next_frame : CP->frame + 1;
+    int went = CP->going, next = went ? CP->next_frame : CP->frame + 1;
     CP->going = 0;
     if (!CP->mv) return;
     if (next < 1) next = 1;
-    if (next > CP->mv->score.nframes) next = CP->mv->score.nframes;  /* aan het eind blijven staan */
+    if (next > CP->mv->score.nframes) {
+        /* de speelkop loopt van de score af: de projector stopt (Magnus1 eindigt zo op het lege frame StopGame);
+         * een dialoogvenster of een go voorbij het eind blijft op het laatste frame staan */
+        if (CP == &P && !went) { P.halted = 2; return; }
+        next = CP->mv->score.nframes;
+    }
     int changed = next != CP->frame;
     CP->frame = next;
     (void)changed;
@@ -1262,6 +1279,7 @@ static Datum bi_puppetSound(Datum *a, int n) {
     int ch = 1;
     Datum x = ARG(0);
     if (n >= 2) { ch = d_toint(ARG(0)); x = ARG(1); }
+    if (ch >= 1 && ch <= 2) g_score_snd[ch] = 0;   /* het script heeft het kanaal nu */
     if (x.t == T_INT && d_toint(x) == 0) { sound_stop(ch); return VOIDD; }
     if (x.t == T_VOID) { sound_stop(ch); return VOIDD; }
     Datum m = mkmember(x, VOIDD);
@@ -1277,7 +1295,12 @@ static Datum bi_sound(Datum *a, int n) {
     Datum cmd = ARG(0);
     if (cmd.t != T_SYM) return VOIDD;
     const char *c = symname(cmd.u.i);
-    if (!_stricmp(c, "stop") || !_stricmp(c, "fadeOut")) sound_stop(d_toint(ARG(1)));
+    if (!_stricmp(c, "stop")) sound_stop(d_toint(ARG(1)));
+    else if (!_stricmp(c, "fadeOut")) {   /* sound fadeOut ch, ticks; zonder ticks 15 frames van het huidige tempo */
+        int tempo = P.tempo > 0 ? P.tempo : 15;
+        int ticks = n >= 3 ? d_toint(ARG(2)) : 15 * 60 / tempo;
+        sound_fade_out(d_toint(ARG(1)), ticks * 1000 / 60);
+    }
     else if (!_stricmp(c, "playFile")) {
         /* spellingspel: eigen woorden, gMMPath & "WAV" & naam. Het laatst geladen bestand per kanaal
            blijft bewaard tot het volgende (de mixer speelt het nog af). */
@@ -1289,6 +1312,7 @@ static Datum bi_sound(Datum *a, int n) {
         if (!s) s = sound_load_wav(path_resolve(path, alt, sizeof alt));
         if (!s) { vm_error("sound playFile: %s niet te laden", path); return VOIDD; }
         if (ch >= 1 && ch <= 8) {
+            if (ch <= 2) g_score_snd[ch] = 0;
             sound_stop(ch);
             if (loaded[ch]) { free(loaded[ch]->pcm); free(loaded[ch]); }
             loaded[ch] = s;
@@ -1318,9 +1342,11 @@ static Datum bi_puppetPalette(Datum *a, int n) {
 static Datum bi_puppetTransition(Datum *a, int n) {
     P.trans_pending = 1;
     P.trans_type = d_toint(ARG(0));
+    /* tijd in kwartseconden; 0 = zo snel mogelijk, net als bij de transities in de score */
     P.trans_dur = n >= 2 ? d_toint(ARG(1)) * 250 : 500;
-    if (P.trans_dur <= 0) P.trans_dur = 500;
+    if (P.trans_dur <= 0) P.trans_dur = 100;
     P.trans_chunk = n >= 3 ? d_toint(ARG(2)) : 4;
+    P.trans_area = n >= 4 && d_truthy(ARG(3));
     return VOIDD;
 }
 
@@ -1361,7 +1387,8 @@ static Datum bi_constrainV(Datum *a, int n) {
 }
 
 static Datum bi_dontPassEvent(Datum *a, int n) { (void)a; (void)n; vm_dontpass = 1; return VOIDD; }
-static Datum bi_halt(Datum *a, int n) { (void)a; (void)n; P.halted = 1; vm_abort = 1; return VOIDD; }
+/* in een projector sluit halt het programma (start.dxr: geen cd, geen 256 kleuren) */
+static Datum bi_halt(Datum *a, int n) { (void)a; (void)n; P.halted = 2; vm_abort = 1; return VOIDD; }
 static Datum bi_abort(Datum *a, int n) { (void)a; (void)n; vm_abort = 1; return VOIDD; }
 static Datum bi_alert(Datum *a, int n) { char buf[1024]; host_alert(d_tostr(ARG(0), buf, sizeof buf)); return VOIDD; }
 static Datum bi_put(Datum *a, int n) {

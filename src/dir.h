@@ -316,6 +316,7 @@ typedef struct Channel {
     int movie_rate;     /* digitale video: 0 = stil */
     uint32_t movie_t0;  /* ms waarop movie_time0 gold */
     int movie_time0;    /* ticks */
+    int loop_id, loop_frame;   /* filmloop: lid (lib << 16 | nummer) en het huidige beeld van de loop */
 } Channel;
 
 #define NCHAN 48
@@ -351,6 +352,7 @@ typedef struct Player {
     char start_name[16];   /* opstartfilm in de opslagmap: "start", of "start_nordic" bij de Scandinavische cd */
     char bin_path[260];
     int trans_pending, trans_type, trans_dur, trans_chunk;
+    int trans_area;           /* 1 = "changing area only": de transitie alleen waar het beeld verandert */
     int cursor;
     int paused;               /* pause/continue: speelkop van de stage staat stil */
     int release_pending;      /* headless klik: knop geldt al als losgelaten */
@@ -391,6 +393,8 @@ int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret);
 uint32_t *stage_bitmap_argb(Bitmap *bm);
 void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t);
 void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s);   /* op schaal s */
+void trans_frame_r(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s,
+                   int rx, int ry, int rw, int rh);   /* alleen in een rechthoek (podiumpixels) */
 int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintOMatic-document is */
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
 int disc_make_start(const char *dir, const char *dst);   /* start.dxr uit START32.EXE of SETUP.EXE in dir */
@@ -430,6 +434,7 @@ void sound_play_member(int ch, CastLib *c, Member *m);
 void sound_play_sound(int ch, Sound *s);
 Sound *sound_load_wav(const char *path);
 void sound_stop(int ch);
+void sound_fade_out(int ch, int ms);
 int sound_busy(int ch);
 void sound_set_level(int lvl);
 void sound_set_volume(int ch, int vol);   /* the volume of sound ch, 0-255 */

@@ -16,7 +16,8 @@
 #define NCH 8
 #define VVOICE (NCH + 1)   /* extra stem voor het geluid van digitale video */
 
-typedef struct Voice { Sound *s; double pos, step; int playing; uint32_t start, dur; } Voice;
+/* fade_total > 0: sound fadeOut loopt, nog fade_left van fade_total uitvoerframes; fade_end = eindtijd in ms */
+typedef struct Voice { Sound *s; double pos, step; int playing; uint32_t start, dur; int fade_total, fade_left; uint32_t fade_end; } Voice;
 static Voice g_v[NCH + 2];
 /* the volume of sound n (0-255): hoort bij het kanaal, niet bij het geluid, en blijft staan tot het spel hem wijzigt */
 static int g_vol[NCH + 2] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
@@ -51,6 +52,10 @@ static void mix(int16_t *out, int frames) {
                 if (!s->loop || s->frames <= 0) { v->playing = 0; break; }
                 v->pos -= s->frames;   /* herhalen */
                 k = (int)v->pos;
+            }
+            if (v->fade_total) {
+                if (v->fade_left <= 0) { v->playing = 0; v->fade_total = 0; break; }
+                vol = g_vol[c] * v->fade_left-- / v->fade_total;
             }
             int l, r;
             if (s->channels == 2) { l = s->pcm[2 * k]; r = s->pcm[2 * k + 1]; }
@@ -186,6 +191,7 @@ void sound_play_sound(int ch, Sound *s) {
     g_v[ch].playing = 1;
     g_v[ch].start = now_ms();
     g_v[ch].dur = (uint32_t)((double)s->frames * 1000 / s->rate);
+    g_v[ch].fade_total = 0;
     plat_unlock();
 }
 
@@ -193,13 +199,30 @@ void sound_stop(int ch) {
     if (ch < 1 || ch > NCH) return;
     plat_lock();
     g_v[ch].playing = 0;
+    g_v[ch].fade_total = 0;
+    plat_unlock();
+}
+
+/* sound fadeOut: lineair naar stil in ms milliseconden, dan stoppen */
+void sound_fade_out(int ch, int ms) {
+    if (ch < 1 || ch > NCH) return;
+    if (ms <= 0) { sound_stop(ch); return; }
+    plat_lock();
+    if (g_v[ch].playing) {
+        g_v[ch].fade_total = g_v[ch].fade_left = (int)((int64_t)ms * RATE / 1000);
+        g_v[ch].fade_end = now_ms() + (uint32_t)ms;
+    }
     plat_unlock();
 }
 
 int sound_busy(int ch) {
     if (ch < 1 || ch > NCH) return 0;
-    /* zonder audio-apparaat (headless): bezig zolang de echte duur van het geluid */
-    if (!g_ok) return g_v[ch].playing && (g_v[ch].s->loop || now_ms() - g_v[ch].start < g_v[ch].dur);
+    /* zonder audio-apparaat (headless): bezig zolang de echte duur van het geluid, of tot het einde van een fade */
+    if (!g_ok) {
+        Voice *v = &g_v[ch];
+        if (v->playing && v->fade_total && (int32_t)(now_ms() - v->fade_end) >= 0) v->playing = v->fade_total = 0;
+        return v->playing && (v->s->loop || now_ms() - v->start < v->dur);
+    }
     return g_v[ch].playing;
 }
 

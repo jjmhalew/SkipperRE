@@ -203,16 +203,31 @@ static int drain_input(void) {
 
 /* ------------------------------------------------------------------ tonen */
 /* Director-transities (codes 1..52, zie trans.c), live in het venster */
-static void transition(const uint32_t *from, const uint32_t *to, int type, int dur, int chunk, int s) {
+static void transition(const uint32_t *from, const uint32_t *to, int type, int dur, int chunk, int s, int area) {
     if (g_headless || dur <= 0) return;
     static uint32_t *tmp;
     static int tmp_s;
     if (tmp_s != s) { free(tmp); tmp = malloc((size_t)640 * 480 * s * s * 4); tmp_s = s; }
+    /* changing area only: de rechthoek (in podiumpixels) waarin oud en nieuw verschillen */
+    int rx = 0, ry = 0, rw = 640, rh = 480;
+    if (area) {
+        int l = 640, t = 480, r = 0, b = 0, W = 640 * s;
+        for (int y = 0; y < 480 * s; y++)
+            for (int x = 0; x < W; x++)
+                if (from[(size_t)y * W + x] != to[(size_t)y * W + x]) {
+                    if (x / s < l) l = x / s;
+                    if (x / s >= r) r = x / s + 1;
+                    if (y / s < t) t = y / s;
+                    if (y / s >= b) b = y / s + 1;
+                }
+        if (r <= l) return;   /* niets veranderd */
+        rx = l; ry = t; rw = r - l; rh = b - t;
+    }
     uint32_t t0 = now_ms();
     for (;;) {
         double t = (double)(now_ms() - t0) / dur;
         if (t >= 1) break;
-        trans_frame_s(tmp, from, to, type, chunk, t, s);
+        trans_frame_r(tmp, from, to, type, chunk, t, s, rx, ry, rw, rh);
         host_blit(tmp, 640 * s, 480 * s);
         host_events();
         plat_sleep(10);
@@ -231,7 +246,7 @@ void stage_present(void) {
     if (!g_prev) g_prev = calloc(n, 4);
     if (P.trans_pending) {
         P.trans_pending = 0;
-        transition(g_prev, shown, P.trans_type, P.trans_dur > 2000 ? 2000 : P.trans_dur, P.trans_chunk, s);
+        transition(g_prev, shown, P.trans_type, P.trans_dur > 2000 ? 2000 : P.trans_dur, P.trans_chunk, s, P.trans_area);
     }
     host_blit(shown, 640 * s, 480 * s);
     memcpy(g_prev, shown, n * 4);

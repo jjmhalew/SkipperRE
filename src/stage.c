@@ -230,8 +230,6 @@ static void draw_text(uint32_t *dst, int ox, int oy, int cw, int chh, Text *t, C
 }
 
 /* ------------------------------------------------------------------ filmloops */
-static uint32_t g_loop_tick;
-
 static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player *ctx);
 
 static void draw_filmloop(uint32_t *dst, int ox, int oy, int cw, int chh, CastLib *cl, Member *m, Channel *c, int l, int t) {
@@ -243,7 +241,7 @@ static void draw_filmloop(uint32_t *dst, int ox, int oy, int cw, int chh, CastLi
     }
     Score *sc = m->loop;
     if (!sc->nframes) return;
-    Frame *fr = &sc->f[g_loop_tick % sc->nframes];
+    Frame *fr = &sc->f[c->loop_frame % sc->nframes];
     /* de sprites van de loop staan in loop-coördinaten; de loop-rect begint op (rect_l, rect_t) */
     Player tmp;
     memset(&tmp, 0, sizeof tmp);
@@ -257,8 +255,8 @@ static void draw_filmloop(uint32_t *dst, int ox, int oy, int cw, int chh, CastLi
         k->fore = r->fore; k->back = r->back;
         k->loch = r->loch - m->rect_l + l; k->locv = r->locv - m->rect_t + t;
         k->w = r->w; k->h = r->h; k->stretch = r->stretch; k->visible = 1; k->blend = r->blend;
+        k->loop_frame = c->loop_frame;   /* een loop in de loop loopt mee */
     }
-    (void)c;
     draw_channels(dst, ox, oy, cw, chh, &tmp);
 }
 
@@ -366,7 +364,6 @@ static void compose(uint32_t *dst, int s) {
 void stage_compose(void) {
     if (!stage_px) stage_px = calloc(SW * SH, 4);
     build_lut();
-    g_loop_tick++;
     compose(stage_px, 1);
 }
 

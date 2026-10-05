@@ -3,9 +3,10 @@
  * De nummers zijn die van puppetTransition en van transitie-castleden (spec[2]). */
 #include "dir.h"
 #include <math.h>
+#include <string.h>
 
-#define W 640
-#define H 480
+#define SW_ 640
+#define SH_ 480
 
 static uint32_t hash2(uint32_t x, uint32_t y) {
     uint32_t h = x * 0x8da6b343u ^ y * 0xd8163841u;
@@ -32,12 +33,23 @@ static int dir_of(int type, int *dx, int *dy) {
     return 0;
 }
 
-/* scale s: from/to/out zijn (640 s) x (480 s); de maskers worden op podiumpixels bepaald, schuiven op schaalpixels */
-void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s) {
+/* scale s: from/to/out zijn (640 s) x (480 s); de maskers worden op podiumpixels bepaald, schuiven op schaalpixels.
+ * Het effect speelt in de rechthoek (rx, ry, rw, rh) in podiumpixels ("changing area only": alleen het deel dat
+ * verandert; anders het hele podium); daarbuiten staat al het nieuwe beeld. */
+void trans_frame_r(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s,
+                   int rx, int ry, int rw, int rh) {
     if (t < 0) t = 0;
     if (t > 1) t = 1;
     if (chunk < 1) chunk = 1;
     if (s < 1) s = 1;
+    if (rx < 0) rw += rx, rx = 0;
+    if (ry < 0) rh += ry, ry = 0;
+    if (rx + rw > SW_) rw = SW_ - rx;
+    if (ry + rh > SH_) rh = SH_ - ry;
+    if (rw <= 0 || rh <= 0) { memcpy(out, to, (size_t)SW_ * SH_ * s * s * 4); return; }
+    if (rw < SW_ || rh < SH_) memcpy(out, to, (size_t)SW_ * SH_ * s * s * 4);
+    const int W = rw, H = rh, STR = SW_ * s, OX = rx * s, OY = ry * s;
+#define IDX(x, y) ((size_t)(OY + (y)) * STR + OX + (x))
     int dx = 0, dy = 0, SWS = W * s, SHS = H * s;
     if (dir_of(type, &dx, &dy)) {
         int ox = qstep(t * W, chunk) * s, oy = qstep(t * H, chunk) * s;   /* afgelegde afstand */
@@ -46,16 +58,16 @@ void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int 
                 uint32_t p;
                 if (type <= 14) {            /* push: oud schuift weg, nieuw komt er direct achteraan */
                     int sx = x - dx * ox, sy = y - dy * oy;
-                    if (sx >= 0 && sx < SWS && sy >= 0 && sy < SHS) p = from[sy * SWS + sx];
-                    else p = to[(sy + dy * SHS) * SWS + (sx + dx * SWS)];
+                    if (sx >= 0 && sx < SWS && sy >= 0 && sy < SHS) p = from[IDX(sx, sy)];
+                    else p = to[IDX(sx + dx * SWS, sy + dy * SHS)];
                 } else if (type <= 22) {     /* reveal: oud schuift weg over het nieuwe */
                     int sx = x - dx * ox, sy = y - dy * oy;
-                    p = sx >= 0 && sx < SWS && sy >= 0 && sy < SHS ? from[sy * SWS + sx] : to[y * SWS + x];
+                    p = sx >= 0 && sx < SWS && sy >= 0 && sy < SHS ? from[IDX(sx, sy)] : to[IDX(x, y)];
                 } else {                     /* cover: nieuw schuift erover */
                     int sx = x + dx * (SWS - ox), sy = y + dy * (SHS - oy);
-                    p = sx >= 0 && sx < SWS && sy >= 0 && sy < SHS ? to[sy * SWS + sx] : from[y * SWS + x];
+                    p = sx >= 0 && sx < SWS && sy >= 0 && sy < SHS ? to[IDX(sx, sy)] : from[IDX(x, y)];
                 }
-                out[y * SWS + x] = p;
+                out[IDX(x, y)] = p;
             }
         return;
     }
@@ -114,8 +126,13 @@ void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int 
             }
             default: show = rnd01(x, y) < t; break;
             }
-            out[Y * SWS + X] = show ? to[Y * SWS + X] : from[Y * SWS + X];
+            out[IDX(X, Y)] = show ? to[IDX(X, Y)] : from[IDX(X, Y)];
         }
+#undef IDX
+}
+
+void trans_frame_s(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t, int s) {
+    trans_frame_r(out, from, to, type, chunk, t, s, 0, 0, SW_, SH_);
 }
 
 void trans_frame(uint32_t *out, const uint32_t *from, const uint32_t *to, int type, int chunk, double t) {
