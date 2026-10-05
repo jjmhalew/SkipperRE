@@ -368,9 +368,9 @@ int main(int argc, char **argv) {
     host_crash_init();
     const char *data = "extract", *movie = "start", *shot = NULL, *lang = NULL;
     int shot_frames = 0, scale = 0, fullscreen = 0, dumptex = 0, hd = 0, songs = 0;
-    int clicks[64][3], nclicks = 0, every = 0, dump = 0;
-    int drags[16][5], ndrags = 0;
-    int keys[64][3], nkeys = 0;
+    enum { MAXEV = 512 };   /* headless invoer van de opdrachtregel */
+    static int clicks[MAXEV][3], drags[MAXEV][5], keys[MAXEV][3];
+    int nclicks = 0, ndrags = 0, nkeys = 0, every = 0, dump = 0;
     struct { const char *name; int val, frame; } globs[16];
     int nglobs = 0;
     char bin[300] = "";
@@ -387,16 +387,26 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--hd") && i + 1 < argc) hd = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--trace")) vm_trace = 1;
         else if (!strcmp(argv[i], "--shot") && i + 2 < argc) { shot_frames = atoi(argv[++i]); shot = argv[++i]; g_headless = 1; }
-        else if (!strcmp(argv[i], "--click") && i + 3 < argc && nclicks < 64) {
-            clicks[nclicks][0] = atoi(argv[++i]); clicks[nclicks][1] = atoi(argv[++i]); clicks[nclicks++][2] = atoi(argv[++i]);
+        /* boven de grens de getallen toch overslaan: anders werd het laatste getal de datamap (fuzz.py met honderden klikken) */
+        else if (!strcmp(argv[i], "--click") && i + 3 < argc) {
+            if (nclicks < MAXEV) {
+                clicks[nclicks][0] = atoi(argv[i + 1]); clicks[nclicks][1] = atoi(argv[i + 2]); clicks[nclicks++][2] = atoi(argv[i + 3]);
+            } else fprintf(stderr, "[args] te veel --click\n");
+            i += 3;
         }
-        else if (!strcmp(argv[i], "--drag") && i + 5 < argc && ndrags < 16) {
-            for (int k = 0; k < 5; k++) drags[ndrags][k] = atoi(argv[++i]);
-            ndrags++;
+        else if (!strcmp(argv[i], "--drag") && i + 5 < argc) {
+            if (ndrags < MAXEV) {
+                for (int k = 0; k < 5; k++) drags[ndrags][k] = atoi(argv[i + 1 + k]);
+                ndrags++;
+            } else fprintf(stderr, "[args] te veel --drag\n");
+            i += 5;
         }
-        else if (!strcmp(argv[i], "--key") && i + 3 < argc && nkeys < 64) {
-            for (int k = 0; k < 3; k++) keys[nkeys][k] = atoi(argv[++i]);
-            nkeys++;
+        else if (!strcmp(argv[i], "--key") && i + 3 < argc) {
+            if (nkeys < MAXEV) {
+                for (int k = 0; k < 3; k++) keys[nkeys][k] = atoi(argv[i + 1 + k]);
+                nkeys++;
+            } else fprintf(stderr, "[args] te veel --key\n");
+            i += 3;
         }
         else if (!strcmp(argv[i], "--transtest") && i + 1 < argc) {   /* test: alle transities op t = 0.35 */
             static uint32_t a[640 * 480], b[640 * 480], o[640 * 480];
