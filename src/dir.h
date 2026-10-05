@@ -334,6 +334,7 @@ typedef struct Player {
     uint32_t timer_base;
     int mouse_x, mouse_y, mouse_down, click_on, last_click, last_roll;
     int click_x, click_y;     /* the clickLoc: waar de laatste klik begon */
+    int double_click;         /* the doubleClick */
     int key_code; char key[8];
     int sound_level;
     int exit_lock;

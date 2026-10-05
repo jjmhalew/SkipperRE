@@ -574,19 +574,48 @@ Datum chunk_last(Datum str, int kind) {
     return get_chunk(str, v);
 }
 
-/* put x into/after/before chunk van een string -> nieuwe string */
+/* put x into/after/before chunk van een string -> nieuwe string; how 1 into, 2 after, 3 before, 4 delete.
+ * Zoals Director: `put x into item/line n` voorbij het einde vult aan met lege items/regels, en `delete` van een
+ * item, regel of woord neemt het scheidingsteken (of de spaties) mee. */
 static Datum put_chunk(Datum target, int v[8], Datum val, int how) {
     Str *s = d_asstr(target);
-    int b = 0, e = s->len;
+    int b = 0, e = s->len, pb = 0, pe = s->len, last = 0;
     int kinds[4] = {4, 3, 2, 1};
     int idx[4][2] = {{v[6], v[7]}, {v[4], v[5]}, {v[2], v[3]}, {v[0], v[1]}};
     for (int k = 0; k < 4; k++) {
         if (!idx[k][0]) continue;
+        if (how != 4 && (kinds[k] == 3 || kinds[k] == 4)) {
+            int have = 1;
+            for (int i = b; i < e; i++) have += is_delim(s->s[i], kinds[k], ',');
+            if (idx[k][0] > have) {   /* aanvullen: scheidingstekens achter dit bereik invoegen */
+                int add = idx[k][0] - have;
+                Str *n = malloc(sizeof(Str) + s->len + add + 1);
+                n->rc = 1;
+                n->len = s->len + add;
+                memcpy(n->s, s->s, e);
+                memset(n->s + e, kinds[k] == 3 ? ',' : '\r', add);
+                memcpy(n->s + e + add, s->s + e, s->len - e + 1);
+                if (--s->rc == 0) free(s);
+                s = n;
+                e += add;
+            }
+        }
         int bb, ee;
+        pb = b; pe = e; last = kinds[k];
         chunk_range(s->s + b, e - b, kinds[k], idx[k][0], idx[k][1] ? idx[k][1] : idx[k][0], &bb, &ee);
         e = b + ee;
         b = b + bb;
     }
+    if (how == 4 && last >= 2 && b < e) {
+        if (last == 2) {   /* woord: de spaties erachter mee, of ervoor bij het laatste woord */
+            int e2 = e;
+            while (e2 < pe && is_delim(s->s[e2], 2, ',')) e2++;
+            if (e2 > e) e = e2;
+            else while (b > pb && is_delim(s->s[b - 1], 2, ',')) b--;
+        } else if (e < pe && is_delim(s->s[e], last, ',')) e++;
+        else if (b > pb && is_delim(s->s[b - 1], last, ',')) b--;
+    }
+    if (how == 4) how = 1;
     Str *x = d_asstr(val);
     int nb = how == 3 ? b : how == 2 ? e : b, ne = how == 1 ? e : nb;
     int len = nb + x->len + (s->len - ne);
@@ -825,7 +854,12 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             break;
         }
         case 0x17: { a = pop(); int v[8]; read8(v); push(get_chunk(a, v)); d_unref(a); break; }
-        case 0x18: { a = pop(); int v[8]; read8(v); d_unref(a); break; }          /* hilite */
+        case 0x18: {   /* hilite chunk of field: castLib, veld, 8 chunkgetallen (de selectie zelf tekenen we niet) */
+            a = pop(); b = pop();
+            int v[8]; read8(v);
+            d_unref(a); d_unref(b);
+            break;
+        }
         case 0x19: case 0x1a: { b = pop(); a = pop();
             push(d_int(player_sprite_intersects(d_toint(a), d_toint(b), op == 0x1a))); break; }
         case 0x1b: { b = pop(); a = pop(); push(player_field(a, b)); d_unref(a); d_unref(b); break; }
@@ -1004,7 +1038,7 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             Datum *slot = var_slot(vt, id, lib, &t);
             if (slot) {
                 Datum empty = d_str("");
-                Datum nv = put_chunk(*slot, v, empty, 1);
+                Datum nv = put_chunk(*slot, v, empty, 4);
                 d_unref(empty);
                 if (vt == 6) { player_set_field(id, lib, nv); d_unref(t); d_unref(nv); }
                 else { d_unref(*slot); *slot = nv; }

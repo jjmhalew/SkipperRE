@@ -597,7 +597,10 @@ void player_mouse(int x, int y, int down, int up, int right) {
         ev = sym(right ? "rightMouseDown" : "mouseDown");
         int ch = sprite_under(lx, ly, 1);
         P.click_on = ch;
-        P.last_click = (int)now_ms();
+        /* the doubleClick: deze klik volgt binnen 500 ms (de standaard van Windows) en vlakbij op de vorige */
+        int t = (int)now_ms();
+        P.double_click = t - P.last_click < 500 && abs(lx - P.click_x) <= 4 && abs(ly - P.click_y) <= 4;
+        P.last_click = t;
         P.click_x = lx; P.click_y = ly;   /* in de coördinaten van het venster, net als the mouseH */
         int top = sprite_under(lx, ly, 2);
         if (!right && top && field_editable(CP, top)) { g_focus_ctx = CP; g_focus_ch = top; }
@@ -753,7 +756,7 @@ Datum player_the(int name) {
     if (!_stricmp(n, "mouseH")) return d_int(mx);
     if (!_stricmp(n, "mouseV")) return d_int(my);
     if (!_stricmp(n, "clickLoc")) return d_point(P.click_x, P.click_y);
-    if (!_stricmp(n, "doubleClick")) return d_int(0);
+    if (!_stricmp(n, "doubleClick")) return d_int(P.double_click);
     if (!_stricmp(n, "result")) return d_ref(vm_result);
     if (!_stricmp(n, "stageLeft") || !_stricmp(n, "stageTop")) return d_int(0);
     if (!_stricmp(n, "stageRight")) return d_int(640);
