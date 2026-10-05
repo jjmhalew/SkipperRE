@@ -40,7 +40,9 @@ Datum xobj_factory(const char *name) {
     return VOIDD;
 }
 
-/* VkKeyScan: teken -> virtuele toets (laag byte) + Shift (0x100), US-indeling */
+/* VkKeyScan: teken -> virtuele toets (laag byte) + Shift (0x100), US-indeling. De ABC-film (MMB09) slaat letters over
+ * die niet op het toetsenbord staan; buiten Windows tellen de letters van Windows-1252 (æ, ø, å, ä, ö, ...) als
+ * typbaar, want SDL levert ze als tekst van elke indeling of van het schermtoetsenbord. */
 static int vk_key_scan(int c) {
 #ifdef _WIN32
     return VkKeyScanA((char)c);
@@ -48,6 +50,8 @@ static int vk_key_scan(int c) {
     c &= 255;
     if (c >= 'a' && c <= 'z') return c - 32;
     if (c >= 'A' && c <= 'Z') return c | 0x100;
+    if (c >= 0xe0 && c != 0xf7) return c;                  /* kleine letters met accent */
+    if (c >= 0xc0 && c <= 0xde && c != 0xd7) return c | 0x100;
     if (c >= '0' && c <= '9') return c;
     static const char *sh = ")!@#$%^&*(";
     const char *p = c ? strchr(sh, c) : NULL;
