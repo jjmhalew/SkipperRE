@@ -282,6 +282,7 @@ static void toggle_fullscreen(void) {
 static HCURSOR g_cur_arrow, g_cur_wait;
 static HCURSOR g_cur_cache[64];
 static int g_cur_key[64], g_cur_scale[64], g_ncur;
+static Movie *g_cur_mv[64];   /* cursorleden van het podium of van een dialoogvenster */
 
 /* cursors groeien mee met het podium (een 16x16-cursor hoort bij 640x480) */
 static int cursor_scale(void) {
@@ -292,7 +293,7 @@ static int cursor_scale(void) {
 static HCURSOR bitmap_cursor(Datum lst) {
     int num = d_toint(lst.u.l->v[0]), mask = lst.u.l->n > 1 ? d_toint(lst.u.l->v[1]) : 0;
     int key = num << 16 | (mask & 0xffff), s = cursor_scale();
-    for (int i = 0; i < g_ncur; i++) if (g_cur_key[i] == key && g_cur_scale[i] == s) return g_cur_cache[i];
+    for (int i = 0; i < g_ncur; i++) if (g_cur_key[i] == key && g_cur_scale[i] == s && g_cur_mv[i] == cursor_movie()) return g_cur_cache[i];
     int cw, ch, hx, hy;
     uint32_t *img = cursor_image(lst, s, &cw, &ch, &hx, &hy);
     if (!img) return g_cur_arrow;
@@ -319,7 +320,7 @@ static HCURSOR bitmap_cursor(Datum lst) {
         for (int i = 0; i < g_ncur; i++) DestroyCursor(g_cur_cache[i]);
         g_ncur = 0;
     }
-    g_cur_key[g_ncur] = key; g_cur_scale[g_ncur] = s; g_cur_cache[g_ncur++] = c;
+    g_cur_key[g_ncur] = key; g_cur_scale[g_ncur] = s; g_cur_mv[g_ncur] = cursor_movie(); g_cur_cache[g_ncur++] = c;
     return c;
 }
 

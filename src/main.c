@@ -135,9 +135,14 @@ void stage_fit(int cw, int ch, int *l, int *t, int *w, int *h) {
 }
 
 /* sprite-cursor onder de muis, anders de globale cursor() */
+/* de film van de laatst gevraagde cursor: een sprite in een dialoogvenster wijst naar castleden van dat venster */
+static Movie *g_cursor_mv;
+Movie *cursor_movie(void) { return g_cursor_mv ? g_cursor_mv : P.mv; }
+
 Datum cursor_wanted(void) {
-    int ch = sprite_mouse_target(P.mouse_x, P.mouse_y);
-    if (ch && P.ch[ch].cursor.t != T_VOID && !(P.ch[ch].cursor.t == T_INT && P.ch[ch].cursor.u.i == 0)) return P.ch[ch].cursor;
+    Datum c = player_sprite_cursor(P.mouse_x, P.mouse_y, &g_cursor_mv);
+    if (c.t != T_VOID) return c;
+    g_cursor_mv = P.mv;
     return *global_ref(sym("_cursor"));
 }
 
@@ -147,8 +152,9 @@ uint32_t *cursor_image(Datum lst, int s, int *w, int *h, int *hx, int *hy) {
     if (lst.t != T_LIST || lst.u.l->n < 1) return NULL;
     int num = d_toint(lst.u.l->v[0]), mask = lst.u.l->n > 1 ? d_toint(lst.u.l->v[1]) : 0;
     CastLib *cl, *ml;
-    Member *m = movie_member(P.mv, (num >> 16) + 1, num & 0xffff, &cl);
-    Member *mm = mask ? movie_member(P.mv, (mask >> 16) + 1, mask & 0xffff, &ml) : NULL;
+    Movie *mv = cursor_movie();
+    Member *m = mv ? movie_member(mv, (num >> 16) + 1, num & 0xffff, &cl) : NULL;
+    Member *mm = mask && mv ? movie_member(mv, (mask >> 16) + 1, mask & 0xffff, &ml) : NULL;
     Bitmap *b = m ? member_bitmap(cl, m) : NULL;
     Bitmap *mb = mm ? member_bitmap(ml, mm) : NULL;
     if (!b || !b->w || !b->h) return NULL;

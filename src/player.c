@@ -532,6 +532,14 @@ void player_idle(void) {
     CP = &P;
     frame_event(sym("idle"));
     vm_abort = 0;
+    /* ook de films in de dialoogvensters krijgen idle (mmtutor verbergt zo de volumemeter weer) */
+    for (Window *w = P.windows; w; w = w->next)
+        if (w->open && w->ctx && w->ctx->mv) {
+            CP = w->ctx;
+            frame_event(sym("idle"));
+            vm_abort = 0;
+        }
+    CP = &P;
 }
 
 /* ------------------------------------------------------------------ invoer */
@@ -590,7 +598,7 @@ void player_mouse(int x, int y, int down, int up, int right) {
         int ch = sprite_under(lx, ly, 1);
         P.click_on = ch;
         P.last_click = (int)now_ms();
-        P.click_x = x; P.click_y = y;
+        P.click_x = lx; P.click_y = ly;   /* in de coördinaten van het venster, net als the mouseH */
         int top = sprite_under(lx, ly, 2);
         if (!right && top && field_editable(CP, top)) { g_focus_ctx = CP; g_focus_ch = top; }
         if (!right && top && CP->ch[top].moveable) {
@@ -696,6 +704,27 @@ void player_key(int code, int ch, int down) {
 /* ------------------------------------------------------------------ the-entities */
 static Datum str_of(const char *s) { return d_str(s); }
 
+/* de muis in de coördinaten van de film in CP: in een dialoogvenster ten opzichte van dat venster */
+static void mouse_in_cp(int *x, int *y) {
+    *x = P.mouse_x; *y = P.mouse_y;
+    for (Window *w = P.windows; w; w = w->next)
+        if (w->ctx == CP) { *x -= w->l; *y -= w->t; }
+}
+
+/* sprite-cursor onder (x, y) in podiumcoördinaten: in het bovenste venster daar, anders op het podium; *mv = de
+ * film waar de cursor-castleden bij horen */
+Datum player_sprite_cursor(int x, int y, Movie **mv) {
+    Window *w = top_window_at(x, y);
+    Player *save = CP, *ctx = w && w->ctx ? w->ctx : &P;
+    CP = ctx;
+    int ch = sprite_under(w ? x - w->l : x, w ? y - w->t : y, 2);
+    CP = save;
+    *mv = ctx->mv;
+    if (ch && ctx->ch[ch].cursor.t != T_VOID && !(ctx->ch[ch].cursor.t == T_INT && ctx->ch[ch].cursor.u.i == 0))
+        return ctx->ch[ch].cursor;
+    return VOIDD;
+}
+
 Datum player_the(int name) {
     const char *n = symname(name);
     uint32_t ms = now_ms();
@@ -716,8 +745,13 @@ Datum player_the(int name) {
         return d_int(P.mouse_down && !P.release_pending);
     }
     if (!_stricmp(n, "mouseUp")) return d_int(!P.mouse_down);
-    if (!_stricmp(n, "mouseH")) { host_pump(); return d_int(P.mouse_x); }
-    if (!_stricmp(n, "mouseV")) return d_int(P.mouse_y);
+    /* de muis in de coördinaten van de film die het vraagt: in een dialoogvenster ten opzichte van dat venster
+     * (de volumeschuif van mmdlg1 staat in een venster op x = 168) */
+    if (!_stricmp(n, "mouseH")) host_pump();   /* de muis bijwerken in `repeat while the stillDown`-lussen */
+    int mx, my;
+    mouse_in_cp(&mx, &my);
+    if (!_stricmp(n, "mouseH")) return d_int(mx);
+    if (!_stricmp(n, "mouseV")) return d_int(my);
     if (!_stricmp(n, "clickLoc")) return d_point(P.click_x, P.click_y);
     if (!_stricmp(n, "doubleClick")) return d_int(0);
     if (!_stricmp(n, "result")) return d_ref(vm_result);
@@ -727,10 +761,10 @@ Datum player_the(int name) {
     if (!_stricmp(n, "colorDepth")) return d_int(8);
     if (!_stricmp(n, "lastFrame")) return d_int(CP->mv ? CP->mv->score.nframes : 0);
     if (!_stricmp(n, "mouseCast") || !_stricmp(n, "mouseMember")) {
-        int ch = sprite_under(P.mouse_x, P.mouse_y, 0);
+        int ch = sprite_under(mx, my, 0);
         return d_int(ch ? CP->ch[ch].member : -1);
     }
-    if (!_stricmp(n, "rollOver")) return d_int(sprite_under(P.mouse_x, P.mouse_y, 0));
+    if (!_stricmp(n, "rollOver")) return d_int(sprite_under(mx, my, 0));
     if (!_stricmp(n, "platform")) return str_of("Windows,32");
     if (!_stricmp(n, "machineType")) return d_int(256);
     if (!_stricmp(n, "maxInteger")) return d_int(0x7fffffff);
@@ -1367,8 +1401,10 @@ static Datum bi_spriteBox(Datum *a, int n) {
 }
 
 static Datum bi_rollOver(Datum *a, int n) {
-    if (n == 0) return d_int(sprite_under(P.mouse_x, P.mouse_y, 0));
-    return d_int(sprite_hit(d_toint(ARG(0)), P.mouse_x, P.mouse_y));
+    int mx, my;
+    mouse_in_cp(&mx, &my);
+    if (n == 0) return d_int(sprite_under(mx, my, 0));
+    return d_int(sprite_hit(d_toint(ARG(0)), mx, my));
 }
 
 static Datum bi_cursor(Datum *a, int n) { d_unref(*global_ref(sym("_cursor"))); *global_ref(sym("_cursor")) = d_ref(ARG(0)); return VOIDD; }

@@ -459,6 +459,8 @@ char *path_resolve(const char *p, char *out, int n);
 void input_push(int kind, int x, int y, int a, int b);   /* 1 muis neer, 2 muis op, 3 toets neer, 4 toets op (a = Mac-keyCode, b = teken) */
 void stage_fit(int cw, int ch, int *l, int *t, int *w, int *h);   /* podium in een venster van cw x ch: 4:3, gecentreerd */
 Datum cursor_wanted(void);     /* sprite-cursor onder de muis, anders cursor() */
+Movie *cursor_movie(void);     /* de film waar de castleden van die cursor bij horen */
+Datum player_sprite_cursor(int x, int y, Movie **mv);   /* sprite-cursor onder (x, y), ook in dialoogvensters, of VOID */
 uint32_t *cursor_image(Datum c, int scale, int *w, int *h, int *hx, int *hy);   /* bitmapcursor (malloc) of NULL */
 
 /* host_win.c (Win32) / host_sdl.c (SDL2): venster, invoer, dialogen */
