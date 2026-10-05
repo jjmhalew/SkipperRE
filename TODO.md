@@ -30,6 +30,37 @@ fidelity/polish, **P3** = nice to have.
       (warning only). Find out whether D5 resets these on a movie switch or silently ignores a missing
       handler, and copy that.
 
+## Audit 2026-10-05 (VM, builtins and file formats against Director 5)
+
+Fixed:
+- [x] A click's or key's `go` was undone by the frame's `on exitFrame go(the frame)`: exitFrame is now skipped when a
+      `go` is already pending (as in Director/ScummVM). The reward dialog (mmdlg5) could not be closed; dialog closes,
+      intro/credits skips and `EndDialog` returns could get lost.
+- [x] `the last char/word/item/line in x` returned VOID (MMB10 `ScrambleWord` lost a letter).
+- [x] `the number of castMembers of castLib "Pictures"` returned 0 (MMB11 could not browse the pictures).
+- [x] Mask ink (9) uses the next member as a 1-bit mask aligned on the regPoints, and `the clickLoc` is where the
+      click started: the flashlight in room I6 shows its beam and can be dragged (verified headless with a crafted save).
+- [x] `the result` = return value of the last handler (mmdlg5 offered hints for items already in the pocket).
+- [x] `the volume of sound n` (per channel, 0-255): intro ducking, background music under speech, muted in the tutorial.
+
+Still open (found by the audit, not fixed yet):
+- [ ] **Credits are blank**: the `Credits` member in Magnus1 is richtext (type 12), which is never drawn. RTE1 has the
+      plain text, RTE2 a pre-rendered 624x443 image.
+- [ ] **End of Magnus1 freezes on the logos**: `StopGame` is the last (empty) frame 280; a projector quits at the end of
+      the score, `apply_go` clamps to the last frame instead. `halt` doesn't quit either.
+- [ ] Score sound channels never stop when their cell ends (Magnus1 `DrumLoop2` loops on through the ending).
+- [ ] Built-in palettes -101/-102 (Windows system palettes) are mapped to the Mac palette (`palette_lookup`): Magnus1
+      logos and the Mmtutor end screen.
+- [ ] MIAW: `the mouseH/V` (and the clickLoc) should be window-local (Mmdlg1 volume slider jumps ~168 px); windows get
+      no `idle` (Mmtutor's `on idle` hides the volume meter); window sprite cursors are ignored (`cursor_wanted`).
+- [ ] The Fmap parser never matches (entries start at `8 + be16(b+24)`, id at +6), so all text is Arial; Mac font 1
+      (Geneva) should map to MS Sans Serif. Field drop shadow (spec byte 24) is ignored (`Points`, save-slot numbers).
+- [ ] `puppetTransition` time 0 = 500 ms (should be fastest; score transitions use 100 ms); "changing area only" ignored.
+- [ ] `sound fadeOut` stops at once (Intro); film loops share one global phase (`g_loop_tick`).
+- [ ] Latent: `hilite chunk of field` is a no-op (and pops one operand too few), `delete line/item` keeps the
+      delimiter, `put into line N` past the end doesn't pad, `send()` is not a builtin, `the doubleClick` is always 0.
+- [ ] `tools/lingodec.py`: drops `exit` inside `if`, prints objcallv4 varrefs as symbols (`symbolp(#gEffectNotify)`).
+
 ## P1 — missing features
 
 - [x] **Digital video (ABC game, MMB09).** *(done: `src/video.c`, own AVI parser + Cinepak decoder, audio track
