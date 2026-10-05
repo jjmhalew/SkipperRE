@@ -14,10 +14,11 @@ its releases.
 - the Nordic CD *Magnus & Myggen* (Ivanoff Interactive), with speech and text in four languages: Danish (*Magnus og
   Myggen*), Norwegian (*Magnus & Myggen*), Swedish (*Magnus och Myggan*) and Finnish (*Manu ja Matti*). At the first
   start the game picks your system's language (Danish otherwise); after that you switch in the game itself, with the
-  flags in the settings screen (F7), separately for speech and text. `--lang DK|N|S|SF` picks it from the command line.
+  flags in the settings screen (F7), separately for speech and text. `--lang DK|N|S|SF` picks it from the command line;
+- the first Danish CD *Magnus og Myggen* (1996, Director 4), an earlier version of the game in Danish only. It asks
+  for a saved game at every start and saves when you quit (Esc), in a small slot picker, as the original did.
 
-Not supported: the first Danish release of 1996 (Director 4, an earlier version of the game) and the later
-re-releases on an installer CD (*Superstarter*, Director 8.5 and 10).
+Not supported: the later re-releases on an installer CD (*Superstarter*, Director 8.5 and 10).
 
 The player's own messages (file picker, errors) are in English, or in Dutch on a Dutch system.
 

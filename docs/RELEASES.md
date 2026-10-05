@@ -10,7 +10,7 @@ The game is called *Magnus og Myggen* in Denmark, *Magnus & Myggen* in Norway, *
 | Dutch, Transposia 1997 (volume `SKIPPER_1`) | `skipper-1` | `SKIPPER_1.BIN` `4d0ca5bc…` | 5 (1217) | yes (the reference) |
 | Dutch, 2003 re-pressing (`SKIPPER_1`, Joliet) | `skipper1` | `SKIPPER_1.bin` `58600eaf…` | 5 | yes |
 | Nordic, Ivanoff, "Magnus 1.5" (`MAGNUS15S`), four languages | `magnus-mygg-1` | `MagnusMygg1.img` `40fb3afe…` (CloneCD) | 5 (1217) | yes |
-| Danish, first release 1996 (`MAGNUS11`) | `magnus-myggen-leg-og-laer` | `Magnus-Myggen-Leg-og-Laer.iso` `27f69c23…` | 4 (1117) | no |
+| Danish, first release 1996 (`MAGNUS11`) | `magnus-myggen-leg-og-laer` | `Magnus-Myggen-Leg-og-Laer.iso` `27f69c23…` | 4 (1117) | yes (since 0.9.7) |
 | Danish, *Superstarter* 2006 (`M122DK`) | `leg-og-laer-superstarter-version` | `Leg og Lær - Superstarter Version.iso` `e3e639b2…` | 8.5 (1850) | no |
 | Swedish, *Lek och Lär*, re-release (`M_M_1`) | `m-m-1` | `M&M 1.ISO` `b89c078d…` | 10 (1860) | no |
 
@@ -56,12 +56,30 @@ compares them with `the key`: that only works if the Windows projector converted
 port does that when it loads a script (`mac_string` in `src/dfile.c`); before, the screen showed "TaustaŠŠnet".
 Outside Windows `VkKeyScan` now also counts the accented letters as typeable (`src/xobj.c`).
 
-## 4. What the other releases would need
-- **Danish 1996 (Director 4)**: an earlier version of the game, for Windows 3.1. The main movie is inside the projector
-  `MAGNUS.EXE` (28 MB), there are `MAGNUS0.DXR` and `MAGNUS1.DXR` instead of `Magnus.dxr`, no external language cast,
-  no intro and dialog movies, the colouring pages as separate `PIC\PICn` images. Needed: Director 4 files (different
-  cast, score and script layout) and the projector as a movie. The Danish version can also be played from the Nordic
-  CD.
+## 4. The Danish CD of 1996 (Director 4)
+An earlier version of the game (1.1), for Windows 3.1, in Danish only. The main movie "magnus" is inside the projector
+`MAGNUS.EXE` (28 MB; the port extracts it once to `magnus_d4.dxr` in the save folder), `MAGNUS0.DXR` only jumps back
+into it and `MAGNUS1.DXR` is the ending. There is no external language cast and there are no intro or dialog movies:
+the game starts with its own little intro in the well, saving and loading go through a dialog in `MMSYS.DLL`, and
+printing in the colouring book through `MMPRINT.DLL` with the pages as Windows metafiles (`PIC\PICn`).
+
+What the port does for it (`DFILE_D4` in `src/dfile.c`, ScummVM's Director engine as the reference):
+- **Cast members**: a 2+4-byte header with a one-byte type, data before info; scripts are linked to their members
+  through the `scriptId` in the member's info (the cast id in `Lscr` is not reliable in D4).
+- **Score**: 40-byte main channels (sound, tempo, palette, and the transition itself: type, duration in quarter
+  seconds, chunk size, whole stage or changing area) and 20-byte sprite records; everything is in cast 1.
+- **Lingo**: literals of 6 bytes (u16 type + u32), so the operands of literals, arguments and locals count in sixes;
+  `the ... of cast/field` takes one argument (no castLib). Otherwise the bytecode is the same as in D5.
+- **Movie settings**: version 0x45d, the default palette at offset 70.
+- **XObjects**: `LINGO.INI` opens FileIO; `MMSYS.CheckCD` says yes, `LoadSaveGame` is the slot picker (Windows
+  dialog, a message box on Linux/Android), `PrintMetaFile` prints the same page as the cast bitmap `PicN`.
+- `the itemDelimiter` (used to read `Path=` from `MAGNUS.INI`), which the port also writes without quotes now.
+
+Checked headless (`DATA=releases/da/files tools/regress.sh`, 17 checks): the intro, all 11 minigames, the exits,
+the ABC video, printing, saving on quit and loading at the next start; fuzzed without errors. Nobody has played it
+through yet.
+
+## 5. What the other releases would need
 - **Superstarter re-releases (Director 8.5 and 10)**: installer CDs (InstallShield, `DATA1.CAB`); inside, the same
   version 1.5 with the same file names (`Magnus.dxr`, `MAGNUSDK.CXT` or `MAGNUSS.cxt`, ...), saved with a newer
   Director (`DRCF`, `LctX`, Xtras for text, fonts and sound). Needed: unpacking InstallShield and the Director 8.5/10

@@ -118,12 +118,21 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [x] **Options** (`mmdlg1`, F7), **map** (`mmdlg4`, map icon in the pocket), **reward** (`mmdlg5` at
       ≥ 50 points), **tutorial** (`mmtutor`, F1). *(all four verified headless: options (incl. subtitle label after
       the actorList fix), map, tutorial, and the reward mirror via the mirror at ≥ 50 points)*
-- [ ] **All 12 minigames** actually playable: rounds, scoring, back to the room. *(fuzzed with `tools/fuzz.py`:
-      2 seeds x 3000-4000 frames of random clicks/drags/keys per game, no crashes, UBSan traps or unexpected
-      Lingo errors; ABC played through headless incl. video. Real rounds still need a human.)*
-- [ ] **Whole adventure**: 47 locations, all puzzles (`JobIsDone` requires 18 conditions: mirror,
+- [x] **All 12 minigames** actually playable: rounds, scoring, back to the room. *(2026-10-05: real rounds won
+      headless in all 11 books plus the reward mirror: answers computed from the scripts, points awarded, wrong answers
+      tried, back to C5 with the points kept. Found and fixed: the spelling game (MMB10) could not place letters,
+      `the clickOn` ignored moveable sprites; now a regression check. In Calc, Clock and Memory the score in the
+      corner is small and black: the `Points` field there was saved like that, probably the same in the original.
+      `tools/fuzz.py` only used 64 events per run until the same day, see the harness fix.)*
+- [x] **Whole adventure**: 47 locations, all puzzles (`JobIsDone` requires 18 conditions: mirror,
       bucket, pacifier, nut, letter, dice, food, nose, trousers, crown, broom, hat, flowers, …).
       Mainly check the animation chains (`AnimEnd` via `gAnimNotify`, only fixed on 2026-09-25).
+      *(2026-10-05: verified headless from crafted saves: 60 puzzle tests incl. every AnimEnd chain, an exit sweep of all
+      47 locations, and the last condition starting Magnus1. No engine bug. One trap is in the original scripts: opening
+      a book while Skipper pillow-fights or sleeps in C5 leaves `gAnimUseCount` at 1, so C5 can't be left until a game
+      is loaded (F5); the port keeps that as it is.)*
+- [ ] Does D5 send `stepFrame` to the actorList on `updateStage` too, or only when entering a frame (the port)? Only
+      changes animation timing.
 - [x] **Ending** *(verified headless with `--movie Magnus1`: all scenes, dragging the wand to the fairy, celebration,
       credits)*: `CheckDone` → `go(1, "magnus1")` (`Magnus1.dxr`, never started yet; uses
       transition cast members).
@@ -142,7 +151,7 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [ ] Sound: volume levels, background music loops, cut-offs in `puppetSound`.
 - [ ] Text rendering (subtitle bar, score, dialog fields) against the original fonts and sizes.
 - [ ] Cursors (bitmap cursors from member lists) and their hotspots.
-- [ ] Palette fades between locations (`puppetPalette … 60`).
+- [x] Palette fades between locations (`puppetPalette … 60`): instant, as speed 60 is in D5 (third audit round).
 
 ## P3 — host / distribution
 
@@ -185,8 +194,9 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       Nordic dialog texts and the ABC letters; for the Dutch CD it changes the case table of MMB10 (check typing
       é/ë in the spelling game).
 - [x] Dutch 2003 re-release: same game files as 1997, works unchanged.
-- [ ] Danish 1996 first release (Director 4, `MAGNUS0/1.DXR`, main movie inside `MAGNUS.EXE`): needs a Director 4
-      reader. Low priority: the Danish version is on the Nordic CD.
+- [x] Danish 1996 first release (Director 4, `MAGNUS0/1.DXR`, main movie inside `MAGNUS.EXE`): Director 4 cast,
+      score, Lingo and projector support, MMSYS/MMPRINT calls (docs/RELEASES.md section 4). Regression 17/17 on Windows
+      and Linux, fuzzed, ISO install tested. *(nobody has played it through)*
 - [ ] *Superstarter* re-releases (Danish 2006 Director 8.5, Swedish Director 10; InstallShield cabs): need cab
       extraction and the Director 8.5/10 formats. Low priority for the same reason.
 - [x] Android app name per system language: *Magnus og Myggen* (da), *Magnus & Myggen* (nb/no), *Magnus och Myggan* (sv),
