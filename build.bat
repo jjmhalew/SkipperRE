@@ -13,7 +13,7 @@ cd /d "%~dp0"
 set "ZIG_VER=0.16.0"
 set "ZIG_SHA=68659eb5f1e4eb1437a722f1dd889c5a322c9954607f5edcf337bc3684a75a7e"
 set "ZIG_NAME=zig-x86_64-windows-%ZIG_VER%"
-set "SRC=src\main.c src\host_win.c src\host_sdl.c src\plat_win.c src\plat_posix.c src\ini.c src\text_gdi.c src\text_ttf.c src\stb_impl.c src\dfile.c src\lingo.c src\builtins.c src\player.c src\stage.c src\xobj.c src\sound.c src\video.c src\trans.c src\disc.c src\pack.c src\dbgheap.c src\pad.c src\pad_sdl.c src\padinput.c src\texpack.c"
+set "SRC=src\main.c src\host_win.c src\host_sdl.c src\plat_win.c src\plat_posix.c src\ini.c src\text_gdi.c src\text_ttf.c src\stb_impl.c src\dfile.c src\lingo.c src\builtins.c src\player.c src\stage.c src\xobj.c src\sound.c src\video.c src\trans.c src\disc.c src\pack.c src\dbgheap.c src\pad.c src\pad_sdl.c src\padinput.c src\texpack.c src\songs.c"
 set "LIBS=-lgdi32 -luser32 -lwinmm -ldbghelp -lcomdlg32 -lsetupapi -lhid"
 rem Zig bouwt anders voor de processor van de bouw-pc: een exe van een nieuwe pc of van de CI-runner gebruikt dan AVX2 /
 rem AVX-512 en stopt op oudere processors met "illegal instruction" (0xc000001d). Gewone x86-64 draait overal.

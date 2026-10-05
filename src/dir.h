@@ -447,6 +447,7 @@ const uint32_t *chan_video_frame(Channel *c, int *w, int *h);   /* huidig videof
 void cd_play_track(int track);
 void cd_stop(void);
 int cd_playing(void);
+int cd_tracks(void);          /* tracks in de .CUE (0: geen cd-image) */
 
 /* xobjects */
 void xobj_register(void);

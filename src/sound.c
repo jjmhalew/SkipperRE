@@ -264,6 +264,8 @@ void cd_stop(void) {
 
 int cd_playing(void) { return g_cd_track != 0; }
 
+int cd_tracks(void) { return g_bin ? g_ntracks : 0; }
+
 /* WAV-bestand (PCM 8/16-bit, mono/stereo) voor `sound playFile`; NULL als het niet lukt */
 Sound *sound_load_wav(const char *path) {
     long n;

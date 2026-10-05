@@ -191,6 +191,15 @@ void input_push(int kind, int x, int y, int a, int b) {
 
 static int logo_tap(void);
 
+/* voor een eigen lus buiten het spel (songs.c): het volgende event uit de wachtrij */
+int input_next(int *kind, int *x, int *y, int *a, int *b) {
+    if (g_qh == g_qt) return 0;
+    InEv e = g_q[g_qh];
+    g_qh = (g_qh + 1) & 255;
+    *kind = e.kind; *x = e.x; *y = e.y; *a = e.a; *b = e.b;
+    return 1;
+}
+
 /* 1 = een klik of toets vroeg om een ander frame of een andere film (go): de hoofdlus wacht dan niet de rest van
  * dit frame af (bij tempo 8 tot 125 ms), zodat overslaan meteen reageert */
 static int drain_input(void) {
@@ -354,7 +363,7 @@ int main(int argc, char **argv) {
 #endif
     host_crash_init();
     const char *data = "extract", *movie = "start", *shot = NULL, *lang = NULL;
-    int shot_frames = 0, scale = 0, fullscreen = 0, dumptex = 0, hd = 0;
+    int shot_frames = 0, scale = 0, fullscreen = 0, dumptex = 0, hd = 0, songs = 0;
     int clicks[64][3], nclicks = 0, every = 0, dump = 0;
     int drags[16][5], ndrags = 0;
     int keys[64][3], nkeys = 0;
@@ -367,6 +376,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--lang") && i + 1 < argc) lang = argv[++i];
         else if (!strcmp(argv[i], "--scale") && i + 1 < argc) scale = atoi(argv[++i]);
         else if (!strcmp(argv[i], "--fullscreen")) fullscreen = 1;
+        else if (!strcmp(argv[i], "--songs")) songs = 1;
         else if (!strcmp(argv[i], "--dumptex")) dumptex = 1;
         else if (!strcmp(argv[i], "--intro")) g_skip = 0;
         else if (!strcmp(argv[i], "--nointro")) g_skip = 1;
@@ -468,6 +478,10 @@ int main(int argc, char **argv) {
     sound_headless = g_headless;
     sound_init();
     if (!g_headless && !host_open(scale, fullscreen)) { fprintf(stderr, "geen venster\n"); return 1; }
+    if (songs) {   /* eerst het liedjesmenu (Liedjes.exe); de pijl terug start het spel */
+        int songs_run(int (*clicks)[3], int nclicks, int frames, const char *shot);
+        if (!songs_run(clicks, nclicks, shot_frames, shot) || g_headless) return 0;
+    }
     player_start(movie);
     stage_present();
     uint32_t next = now_ms();

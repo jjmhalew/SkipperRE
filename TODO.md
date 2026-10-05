@@ -169,8 +169,9 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       tested with a virtual controller. *(a real pad not tried yet)*
 - [x] **Texture packs** (`--dumptex`, `mods/textures`, HD 2-4x) and **intro skip** when a save exists.
 - [x] **CI** (`.github/workflows/build.yml`): Windows zip, Linux tar.gz, APK; release on a `v*` tag.
-- [ ] Optional: a "Liedjes" menu for the 15 CD-audio songs (the original `Liedjes.exe` is a separate
-      launcher; `src/sound.c` can already play CD audio from the BIN).
+- [x] Optional: a "Liedjes" menu for the 15 CD-audio songs: `--songs` (`src/songs.c`): `Liedjes.bmp` with the
+      hotspots, hover sounds and actions from `Liedjes.ini`, object n = audio track n+1 (Enhanced CD); the arrow starts
+      the game, the red button quits. Verified headless (track 1 and 14, back arrow); not on Android (no command line).
 
 ## Other releases (docs/RELEASES.md)
 

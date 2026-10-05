@@ -58,6 +58,11 @@ A click, tap or key press during the logo goes straight on to the intro (the ori
 end). If you already have a saved game, the logo still plays but the intro is skipped: you go straight to the screen
 for picking a saved game. `--intro` plays the intro anyway, `--nointro` skips both the logo and the intro.
 
+`--songs` opens the Dutch CD's sing-along menu first (*Liedjes om mee te zingen*, the original `Liedjes.exe`: 15 songs
+from other Transposia games, the CD's audio tracks). The songs play from a CD image, so start it with
+`--bin <SKIPPER_1.CUE>` (as in `skipper.exe --bin SKIPPER_1.CUE --songs`); the green arrow starts the game, the red
+button quits.
+
 ### Controls
 | | Mouse / keyboard | Controller (DualSense, DualShock 4, Xbox, ...) | Touch (Android) |
 |---|---|---|---|
