@@ -134,7 +134,7 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       extracted once (`src/disc.c`); `start.dxr` is pulled from the Wise installer. *(MDF/MDS not supported;
       `tools/iso.py` still has a hard-coded path)*
 - [x] Release build (`RELEASE=1 ./build.sh`: -O2, no UBSan, GUI subsystem = no console window), window icon from
-      `Magnus.ico` on the disc (or `res/skipperre.ico`), version info from `res/skipperre.rc` (0.9.5).
+      `Magnus.ico` on the disc (or `res/skipperre.ico`), version info from `res/skipperre.rc` (0.9.6).
 - [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 16 checks, 2-3 s with the virtual clock; same pictures
       on Windows and Linux)* (13 hotspots + walk/drag/mailbox/boss/bucket scenarios).
 - [x] **Single exe** (`make_standalone.bat` → `tools/pack.c` → `SkipperRE-standalone.exe`, ~165 MB): game files
