@@ -1,0 +1,4 @@
+<resources>
+    <!-- de naam van het spel in dat land (docs/RELEASES.md) -->
+    <string name="app_name">Magnus &amp; Myggen</string>
+</resources>

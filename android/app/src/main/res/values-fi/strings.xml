@@ -1,0 +1,4 @@
+<resources>
+    <!-- de naam van het spel in dat land (docs/RELEASES.md) -->
+    <string name="app_name">Manu ja Matti</string>
+</resources>

@@ -188,7 +188,8 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       reader. Low priority: the Danish version is on the Nordic CD.
 - [ ] *Superstarter* re-releases (Danish 2006 Director 8.5, Swedish Director 10; InstallShield cabs): need cab
       extraction and the Director 8.5/10 formats. Low priority for the same reason.
-- [ ] Android app name per system language (*Magnus & Myggen* etc.)?
+- [x] Android app name per system language: *Magnus og Myggen* (da), *Magnus & Myggen* (nb/no), *Magnus och Myggan* (sv),
+      *Manu ja Matti* (fi), otherwise *Skipper & Skeeto* (checked with `aapt dump badging`).
 
 ## Out of scope
 
