@@ -4,6 +4,7 @@
  * Muis: primaire eventhandler (the mouseDownScript) -> spritescript -> castlidscript -> framescript
  * -> moviescript; `pass` geeft door, anders stopt het bij de eerste handler. */
 #include "dir.h"
+#include "winpal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
@@ -98,8 +99,13 @@ static void make_mac_palette(void) {
     g_mac_pal[255][0] = g_mac_pal[255][1] = g_mac_pal[255][2] = 0;
 }
 
+/* num < 0: ingebouwd palet zoals in de score (-1 Mac-systeem, -101 Windows-systeem, -102 Windows D5; de rest
+ * (Rainbow, Grayscale, ...) gebruikt het spel niet en wordt het Mac-palet) */
 static int palette_lookup(Movie *mv, int lib, int num, uint8_t out[256][3]) {
-    if (num <= 0) { memcpy(out, g_mac_pal, sizeof g_mac_pal); return 1; }
+    if (num <= 0) {
+        memcpy(out, num == -101 ? g_win_pal : num == -102 ? g_win_d5_pal : (const uint8_t (*)[3])g_mac_pal, 768);
+        return 1;
+    }
     CastLib *c;
     Member *m = movie_member(mv, lib ? lib : 1, num, &c);
     if (!m || !member_palette(c, m)) return 0;
@@ -430,7 +436,9 @@ static void movie_switch(Movie *mv, int frame) {
         P.pal_lib = 0;
         P.pal_num = 0;
         uint8_t pal[256][3];
-        if (palette_lookup(mv, mv->def_pal_lib, mv->def_pal, pal)) palette_set(pal, 0);
+        /* in VWCF begint de ingebouwde reeks bij 0: -100 = Windows-systeem (-101 in de score) */
+        int dp = mv->def_pal <= 0 ? mv->def_pal - 1 : mv->def_pal;
+        if (palette_lookup(mv, mv->def_pal_lib, dp, pal)) palette_set(pal, 0);
         g_last_snd[1] = g_last_snd[2] = 0;
         P.stage_color = mv->stage_color;
     }
@@ -960,7 +968,11 @@ static Datum member_get(Datum mem, int name) {
         return d_int(0);
     }
     if (!_stricmp(n, "name")) return d_str(m->name);
-    if (!_stricmp(n, "text")) { Text *t = member_text(cl, m); return d_str(t && t->text ? t->text : ""); }
+    if (!_stricmp(n, "text")) {
+        if (m->type == MT_RICHTEXT) { member_richtext(cl, m); return d_str(m->rte_text ? m->rte_text : ""); }
+        Text *t = member_text(cl, m);
+        return d_str(t && t->text ? t->text : "");
+    }
     if (!_stricmp(n, "loaded")) return d_int(1);
     if (!_stricmp(n, "type") || !_stricmp(n, "castType"))
         return d_sym(sym(m->type >= 0 && m->type <= 12 ? type_names[m->type] : "empty"));

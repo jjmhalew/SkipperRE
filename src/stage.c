@@ -185,6 +185,15 @@ static TextCache *text_render(Text *t, int caret) {
     /* alfa in de cache: 0 = niets, 1 = achtergrond (valt weg bij doorzichtige inkt), 255 = tekst / rand / schaduw */
     uint32_t bg = 0x01000000u | (t->bg & 0xffffff);
     for (int i = 0; i < w * h; i++) in[i] = (in[i] & 0xffffff) == 0xffffff ? bg : in[i] | 0xff000000u;
+    if (t->text_shadow > 0) {   /* letters met een zwarte slagschaduw rechtsonder (score `Points`, slotnummers) */
+        int d = t->text_shadow;
+        uint8_t *ink = malloc((size_t)w * h);
+        for (int i = 0; i < w * h; i++) ink[i] = in[i] >> 24 == 255;
+        for (int y = 0; y + d < h; y++)
+            for (int x = 0; x + d < w; x++)
+                if (ink[y * w + x] && !ink[(y + d) * w + x + d]) in[(y + d) * w + x + d] = 0xff000000u;
+        free(ink);
+    }
     if (fr) {   /* veldkader: rand in zwart, marge in de achtergrondkleur, slagschaduw rechtsonder */
         int b = t->border, m = b + t->gutter, sh = t->shadow;
         for (int y = 0; y < H; y++)
@@ -297,6 +306,25 @@ static void draw_channels(uint32_t *dst, int ox, int oy, int cw, int chh, Player
         case MT_FILMLOOP:
             draw_filmloop(dst, ox, oy, cw, chh, cl, m, c, l, t);
             break;
+        case MT_RICHTEXT: {   /* het voorgerenderde tekstbeeld (RTE2) over de achtergrondkleur, of doorzichtig bij inkt 36 */
+            const uint32_t *px = member_richtext(cl, m);
+            if (!px) break;
+            int bgt = c->ink == 36 || c->ink == 8 || c->ink == 1;
+            int rr = l + m->rte_w < r ? l + m->rte_w : r, bb = t + m->rte_h < b ? t + m->rte_h : b;
+            for (int Y = (t < 0 ? 0 : t) * s; Y < (bb < chh ? bb : chh) * s; Y++) {
+                const uint32_t *src = px + (size_t)(Y / s - t) * m->rte_w;
+                uint32_t *row = row_of(dst, ox, oy, Y);
+                for (int X = (l < 0 ? 0 : l) * s; X < (rr < cw ? rr : cw) * s; X++) {
+                    uint32_t p = src[X / s - l], a = p >> 24, d = bgt ? row[X] : m->rte_bg;
+                    if (!a) { if (!bgt) row[X] = 0xff000000u | d; continue; }
+                    uint32_t rc = ((p >> 16 & 255) * a + (d >> 16 & 255) * (255 - a)) / 255;
+                    uint32_t gc = ((p >> 8 & 255) * a + (d >> 8 & 255) * (255 - a)) / 255;
+                    uint32_t bc = ((p & 255) * a + (d & 255) * (255 - a)) / 255;
+                    row[X] = 0xff000000u | rc << 16 | gc << 8 | bc;
+                }
+            }
+            break;
+        }
         case MT_VIDEO: {   /* digitale video: huidig frame, geschaald naar de sprite-rect (copy-ink) */
             int vw, vh;
             const uint32_t *px = chan_video_frame(c, &vw, &vh);

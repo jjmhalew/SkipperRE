@@ -155,6 +155,7 @@ typedef struct Text {
     int dirty;
     /* veldkader (D5): rand, marge en slagschaduw in pixels; boxType 0 = hoogte past zich aan de tekst aan */
     int border, gutter, shadow, box_type;
+    int text_shadow;    /* slagschaduw van de letters zelf (spec byte 24), in pixels */
     uint32_t bg;        /* achtergrond, 0xRRGGBB */
 } Text;
 
@@ -184,6 +185,10 @@ typedef struct Member {
     char *file;         /* gekoppeld bestand (digitalVideo), zonder map */
     struct Video *video;
     int video_failed;
+    uint32_t *rte;      /* richtext: RTE2 als ARGB (alfa = dekking van de tekst), rte_w x rte_h */
+    int rte_w, rte_h;
+    uint32_t rte_bg;    /* achtergrondkleur 0xRRGGBB */
+    char *rte_text;     /* RTE1: platte tekst */
 } Member;
 
 typedef struct CastLib {
@@ -202,6 +207,7 @@ Member *cast_member(CastLib *c, int num);
 Bitmap *member_bitmap(CastLib *c, Member *m);
 Sound *member_sound(CastLib *c, Member *m);
 Text *member_text(CastLib *c, Member *m);
+const uint32_t *member_richtext(CastLib *c, Member *m);   /* MT_RICHTEXT: vult rte_*; NULL als er geen RTE2 is */
 int member_palette(CastLib *c, Member *m);
 
 /* ------------------------------------------------------------------ score */

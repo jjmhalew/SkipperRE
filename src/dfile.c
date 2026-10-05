@@ -311,6 +311,7 @@ Text *member_text(CastLib *c, Member *m) {
         t->back = 0;
         t->border = s[0]; t->gutter = s[1]; t->shadow = s[2]; t->box_type = s[3];
         t->bg = (uint32_t)s[6] << 16 | s[8] << 8 | s[10];   /* 16-bit RGB, hoge bytes */
+        if (m->speclen >= 25) t->text_shadow = s[24];
     }
     int st = dfile_child(c->f, member_owner(c, m), FOURCC('S', 'T', 'X', 'T'));
     uint32_t sz;
@@ -338,6 +339,56 @@ Text *member_text(CastLib *c, Member *m) {
     return t;
 }
 
+/* Richtext (D5): spec = initialRect, boundingRect, antialias, crop, scrollPos, fontSize, displayHeight, 0, voorgrond
+ * RGB, achtergrond 3x u16. RTE1 = platte tekst, RTE2 = het tekstbeeld dat Director tekent: u16 breedte, hoogte, bpp
+ * en dan per rij codes: 0x1f r g b = kleur, 0 of max + aantal = zoveel pixels met die dekking, 0 0 = rest van de rij
+ * leeg, anders 1 pixel met dekking code/max (zoals ScummVM's RTE2::createSurface). */
+const uint32_t *member_richtext(CastLib *c, Member *m) {
+    if (m->rte) return m->rte;
+    if (m->type != MT_RICHTEXT) return NULL;
+    const uint8_t *s = m->spec;
+    uint32_t fore = 0;
+    if (m->speclen >= 34) {
+        fore = (uint32_t)s[25] << 16 | s[26] << 8 | s[27];
+        m->rte_bg = (uint32_t)s[28] << 16 | s[30] << 8 | s[32];
+    }
+    uint32_t sz;
+    const uint8_t *t = dfile_chunk(c->f, dfile_child(c->f, member_owner(c, m), FOURCC('R', 'T', 'E', '1')), &sz);
+    if (t && !m->rte_text) {
+        m->rte_text = malloc(sz + 1);
+        memcpy(m->rte_text, t, sz);
+        m->rte_text[sz] = 0;
+    }
+    const uint8_t *b = dfile_chunk(c->f, dfile_child(c->f, member_owner(c, m), FOURCC('R', 'T', 'E', '2')), &sz);
+    if (!b || sz < 6) return NULL;
+    int w = be16(b), h = be16(b + 2), bpp = be16(b + 4), max = (1 << bpp) - 1;
+    if (w <= 0 || h <= 0 || bpp < 1 || bpp > 8) return NULL;
+    uint32_t *px = calloc((size_t)w * h, 4);
+    size_t p = 6;
+    uint32_t col = fore;
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w && p < sz;) {
+            int k = b[p++];
+            if (k == 0x1f) {
+                if (p + 3 > sz) break;
+                col = (uint32_t)b[p] << 16 | b[p + 1] << 8 | b[p + 2];
+                p += 3;
+                continue;
+            }
+            uint32_t a = (uint32_t)k * 255 / max;
+            if (k == 0 || k == max) {
+                if (p >= sz) break;
+                int n = b[p++];
+                if (!n && !k) break;   /* rest van de rij leeg (calloc) */
+                for (int j = 0; j < n && x < w; j++) px[y * w + x++] = a << 24 | col;
+            } else px[y * w + x++] = a << 24 | col;
+        }
+    m->rte = px;
+    m->rte_w = w;
+    m->rte_h = h;
+    return px;
+}
+
 /* Fmap: fontmap. Formaat (D5): u32 mapLength, u32 namesLength, u32 bodyStart?, ... we zoeken
  * simpelweg de naam die bij id hoort in de namentabel (tweede helft); valt terug op Arial. */
 static void font_name(DFile *f, int id, char *out, int n) {
@@ -349,11 +400,12 @@ static void font_name(DFile *f, int id, char *out, int n) {
     if (sz < 32) return;
     uint32_t map_len = be32(b), names_len = be32(b + 4);
     uint32_t body = 8 + map_len;
+    /* kop: u32 ?, u32 ?, u32 gebruikt, u32 totaal, 3x u32 ?; dan per font u32 naamoffset, u16 platform, u16 id */
     uint32_t count = be32(b + 8 + 8);
-    const uint8_t *e = b + 8 + 16;
+    const uint8_t *e = b + 8 + 28;
     for (uint32_t i = 0; i < count && (size_t)(e - b) + 8 <= 8 + map_len; i++, e += 8) {
         uint32_t noff = be32(e);
-        int fid = be16(e + 4);
+        int fid = be16(e + 6);
         if (fid == id && body + noff + 4 < sz && noff < names_len) {
             uint32_t ln = be32(b + body + noff);
             if (ln > (uint32_t)n - 1) ln = n - 1;
