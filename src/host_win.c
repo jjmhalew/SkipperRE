@@ -333,6 +333,12 @@ static HCURSOR current_cursor(void) {
 }
 
 /* ------------------------------------------------------------------ toetsen: Windows VK -> Mac keyCode */
+/* Shift, Ctrl, CapsLock enz. alleen geven in Director geen keyDown/keyUp (MMB09 telde een losse Shift als fout) */
+static int modifier_vk(WPARAM vk) {
+    return vk == VK_SHIFT || vk == VK_CONTROL || vk == VK_MENU || vk == VK_CAPITAL || vk == VK_NUMLOCK ||
+           vk == VK_SCROLL || vk == VK_LWIN || vk == VK_RWIN || vk == VK_APPS;
+}
+
 static int mac_keycode(int vk) {
     static const struct { int vk, mac; } map[] = {
         {VK_ESCAPE, 53}, {VK_RETURN, 36}, {VK_TAB, 48}, {VK_SPACE, 49}, {VK_BACK, 51}, {VK_DELETE, 117},
@@ -391,6 +397,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         if (LOWORD(lp) == HTCLIENT) { SetCursor(current_cursor()); return TRUE; }
         break;
     case WM_KEYDOWN: {
+        if (modifier_vk(wp)) return 0;
         MSG m;
         int ch = 0;
         if (PeekMessageA(&m, h, WM_CHAR, WM_CHAR, PM_REMOVE)) ch = (int)m.wParam;
@@ -398,7 +405,7 @@ static LRESULT CALLBACK wndproc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
         input_push(3, 0, 0, mac_keycode((int)wp), ch);
         return 0;
     }
-    case WM_KEYUP: input_push(4, 0, 0, mac_keycode((int)wp), g_pending_char); return 0;
+    case WM_KEYUP: if (!modifier_vk(wp)) input_push(4, 0, 0, mac_keycode((int)wp), g_pending_char); return 0;
     }
     return DefWindowProcA(h, msg, wp, lp);
 }

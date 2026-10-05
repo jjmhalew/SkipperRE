@@ -254,7 +254,7 @@ static void update_cursor(void) {
 /* ------------------------------------------------------------------ toetsen: SDL -> Mac keyCode */
 static int mac_keycode(SDL_Keycode k) {
     static const struct { int sdl, mac; } map[] = {
-        {SDLK_ESCAPE, 53}, {SDLK_AC_BACK, 53}, {SDLK_RETURN, 36}, {SDLK_KP_ENTER, 76}, {SDLK_TAB, 48}, {SDLK_SPACE, 49},
+        {SDLK_ESCAPE, 53}, {SDLK_AC_BACK, 53}, {SDLK_RETURN, 36}, {SDLK_KP_ENTER, 36}, {SDLK_TAB, 48}, {SDLK_SPACE, 49},
         {SDLK_BACKSPACE, 51}, {SDLK_DELETE, 117}, {SDLK_LEFT, 123}, {SDLK_RIGHT, 124}, {SDLK_DOWN, 125}, {SDLK_UP, 126},
         {SDLK_HOME, 115}, {SDLK_END, 119}, {SDLK_PAGEUP, 116}, {SDLK_PAGEDOWN, 121}, {SDLK_F1, 122}, {SDLK_F2, 120},
         {SDLK_F3, 99}, {SDLK_F4, 118}, {SDLK_F5, 96}, {SDLK_F6, 97}, {SDLK_F7, 98}, {SDLK_F8, 100}, {SDLK_F9, 101},
@@ -329,6 +329,9 @@ void host_events(void) {
             SDL_Keycode k = e.key.keysym.sym;
             int down = e.type == SDL_KEYDOWN;
             if (down && ((k == SDLK_RETURN && (e.key.keysym.mod & KMOD_ALT)) || k == SDLK_F11)) { toggle_fullscreen(); break; }
+            /* Shift, Ctrl, CapsLock enz. alleen geven in Director geen keyDown/keyUp */
+            if ((k >= SDLK_LCTRL && k <= SDLK_RGUI) || k == SDLK_CAPSLOCK || k == SDLK_NUMLOCKCLEAR || k == SDLK_SCROLLLOCK ||
+                k == SDLK_MODE || k == SDLK_APPLICATION) break;
             /* gewone tekens komen als SDL_TEXTINPUT; hier alleen toetsen zonder teken (of met Ctrl) */
             int printable = k >= 32 && k < 127 && !(e.key.keysym.mod & (KMOD_CTRL | KMOD_GUI));
             if (printable && g_text_on) break;
