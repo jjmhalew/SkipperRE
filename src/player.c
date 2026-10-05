@@ -867,7 +867,7 @@ Datum player_get(int type, int id, Datum *tg, int nt) {
         }
         if (id == 4) return d_int(CP->mv ? CP->mv->nlibs : 0);
         return d_int(0);
-    case 9: case 10: case 11: {
+    case 9: case 10: case 11: case 13: {   /* 13: video-eigenschappen (loop, duration, controller, ...) */
         Datum mem = mkmember(tg[0], tg[1]);
         int nm = id >= 1 && id <= 19 ? S(MEMBER_PROPS[id]) : S("?");
         Datum r = member_get(mem, nm);
@@ -897,7 +897,7 @@ void player_set(int type, int id, Datum *tg, int nt, Datum v) {
         else if (id == 8) P.exit_lock = d_toint(v);
         else if (id == 27) P.stage_color = d_toint(v);
         break;
-    case 9: case 10: case 11: {
+    case 9: case 10: case 11: case 13: {   /* 13: video-eigenschappen (loop, duration, controller, ...) */
         Datum mem = mkmember(tg[0], tg[1]);
         int nm = id >= 1 && id <= 19 ? S(MEMBER_PROPS[id]) : S("?");
         member_set(mem, nm, v);

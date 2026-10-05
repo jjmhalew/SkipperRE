@@ -23,6 +23,42 @@ check() {
     else echo "FOUT  $name: verwacht '$want' | $last"; FAIL=1; fi
 }
 
+# De Deense cd van 1996 (Director 4, DATA=releases/da/files): eigen kamerindeling, geen klik voor de intro nodig
+if [ -f "$DATA/MAGNUS0.DXR" ]; then
+    SHOT=300 check d4start "gCurrentLoc = #C5"   # eerst alleen: haalt de hoofdfilm eenmalig uit MAGNUS.EXE
+    while read -r name x y want; do
+        SHOT=700 check "d4$name" "van $want" --click "$x" "$y" 300 &
+    done <<EOF
+Spell 439 115 MMB10
+ABC 400 98 MMB09
+Music 369 102 MMB05
+Clock 214 126 MMB06
+Balloon 250 106 MMB08
+Paint 274 98 MMB11
+Memory 287 99 MMB07
+Calc 301 104 MMB02
+Count 319 98 MMB04
+Animals 343 109 MMB01
+Hide 576 386 MMB03
+EOF
+    SHOT=700 check d4exit "gCurrentLoc = #D5" --click 240 400 300 &
+    # ABC: letter A, de toets a, het goede plaatje -> video A.AVI (Cinepak), de lengte via "the duration of cast"
+    SHOT=1200 check d4video "gVideoDuration = 840" --click 400 98 300 --click 57 425 500 --key 0 97 700 --click 165 215 900 &
+    SHOT=800 check d4print "\[print\]" --click 274 98 300 --click 562 164 600 &
+    wait
+    # opslaan bij het afsluiten (Esc, Ja: MMSYS.LoadSaveGame -> positie 1) en bij de volgende start laden, in een eigen opslagmap
+    (
+        D="$OUTD/appsave"; mkdir -p "$D/SkipperRE"
+        cp "$OUTD/appdata/SkipperRE/magnus_d4.dxr" "$D/SkipperRE/"
+        APPDATA=$(cygpath -w "$PWD/$D" 2>/dev/null || echo "$PWD/$D"); XDG_DATA_HOME="$PWD/$D"; SKIPPER_SLOT=1
+        export APPDATA XDG_DATA_HOME SKIPPER_SLOT
+        SHOT=900 check d4save "film magnus1" --click 240 400 300 --key 53 27 500 --click 390 330 560
+        SHOT=400 check d4load "gCurrentLoc = #D5"
+        exit $FAIL
+    ) || FAIL=1
+    exit $FAIL
+fi
+
 INTRO="--click 320 240 170"
 # kamer C5: hotspot-midden (x + w/2, y + h/2) -> verwachte film
 while read -r name x y w h want; do

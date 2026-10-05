@@ -98,7 +98,7 @@ static LRESULT CALLBACK dlg_proc(HWND h, UINT msg, WPARAM wp, LPARAM lp) {
             int i = (int)SendMessageA(g_dlg_list, LB_GETCURSEL, 0, 0);
             SendMessageA(g_dlg_list, LB_GETTEXT, i, (LPARAM)buf);
             char *p = strchr(buf, '\t');
-            SetWindowTextA(g_dlg_edit, p && strcmp(p + 1, "(leeg)") ? p + 1 : "");
+            SetWindowTextA(g_dlg_edit, p && strcmp(p + 1, UI("(leeg)", "(empty)")) ? p + 1 : "");
         }
         break;
     case WM_CLOSE: g_dlg_result = 0; g_dlg_done = 1; return 0;
@@ -121,10 +121,19 @@ int ld_save_game(int is_load) {
         RegisterClassA(&wc);
         reg = 1;
     }
+    if (is_load) {   /* nog niets opgeslagen (de D4-cd vraagt het bij elke start): meteen een nieuw spel */
+        int any = 0;
+        for (int i = 1; i <= 16 && !any; i++) {
+            char key[16], name[64];
+            snprintf(key, sizeof key, "GAME%d", i);
+            any = ini_get(ini, "Saved games", key, "", name, sizeof name) > 0;
+        }
+        if (!any) return 0;
+    }
     RECT pr;
     GetWindowRect(g_hwnd, &pr);
     int w = 360, hgt = is_load ? 400 : 440;
-    HWND d = CreateWindowA("SkipperDlg", is_load ? "Spel laden" : "Spel opslaan", WS_POPUP | WS_CAPTION | WS_SYSMENU,
+    HWND d = CreateWindowA("SkipperDlg", is_load ? UI("Spel laden", "Load game") : UI("Spel opslaan", "Save game"), WS_POPUP | WS_CAPTION | WS_SYSMENU,
                            (pr.left + pr.right - w) / 2, (pr.top + pr.bottom - hgt) / 2, w, hgt, g_hwnd, NULL, NULL, NULL);
     HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
     g_dlg_list = CreateWindowA("LISTBOX", "", WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY | LBS_USETABSTOPS,
@@ -134,22 +143,22 @@ int ld_save_game(int is_load) {
         char key[16], name[64], line[96];
         snprintf(key, sizeof key, "GAME%d", i);
         ini_get(ini, "Saved games", key, "", name, sizeof name);
-        snprintf(line, sizeof line, "%d.\t%s", i, name[0] ? name : "(leeg)");
+        snprintf(line, sizeof line, "%d.\t%s", i, name[0] ? name : UI("(leeg)", "(empty)"));
         SendMessageA(g_dlg_list, LB_ADDSTRING, 0, (LPARAM)line);
     }
     SendMessageA(g_dlg_list, LB_SETCURSEL, 0, 0);
     int y = 316;
     g_dlg_edit = NULL;
     if (!is_load) {
-        HWND lbl = CreateWindowA("STATIC", "Naam:", WS_CHILD | WS_VISIBLE, 10, y + 4, 50, 20, d, NULL, NULL, NULL);
+        HWND lbl = CreateWindowA("STATIC", UI("Naam:", "Name:"), WS_CHILD | WS_VISIBLE, 10, y + 4, 50, 20, d, NULL, NULL, NULL);
         SendMessageA(lbl, WM_SETFONT, (WPARAM)font, 0);
         g_dlg_edit = CreateWindowA("EDIT", "", WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, 60, y, w - 76, 24, d, NULL, NULL, NULL);
         SendMessageA(g_dlg_edit, WM_SETFONT, (WPARAM)font, 0);
         SendMessageA(g_dlg_edit, EM_LIMITTEXT, 40, 0);
         y += 34;
     }
-    HWND ok = CreateWindowA("BUTTON", is_load ? "Laden" : "Opslaan", WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, w - 196, y, 85, 28, d, (HMENU)1, NULL, NULL);
-    HWND cancel = CreateWindowA("BUTTON", "Annuleren", WS_CHILD | WS_VISIBLE, w - 104, y, 85, 28, d, (HMENU)2, NULL, NULL);
+    HWND ok = CreateWindowA("BUTTON", is_load ? UI("Laden", "Load") : UI("Opslaan", "Save"), WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON, w - 196, y, 85, 28, d, (HMENU)1, NULL, NULL);
+    HWND cancel = CreateWindowA("BUTTON", UI("Annuleren", "Cancel"), WS_CHILD | WS_VISIBLE, w - 104, y, 85, 28, d, (HMENU)2, NULL, NULL);
     SendMessageA(ok, WM_SETFONT, (WPARAM)font, 0);
     SendMessageA(cancel, WM_SETFONT, (WPARAM)font, 0);
     ShowWindow(d, SW_SHOW);
@@ -169,7 +178,7 @@ int ld_save_game(int is_load) {
                 if (!name[0]) { g_dlg_done = 0; slot = 0; MessageBeep(MB_ICONWARNING); }   /* lege positie: blijf */
             } else {
                 GetWindowTextA(g_dlg_edit, name, sizeof name);
-                if (!name[0]) snprintf(name, sizeof name, "Spel %d", slot);
+                if (!name[0]) snprintf(name, sizeof name, UI("Spel %d", "Game %d"), slot);
                 ini_set(ini, "Saved games", key, name);
             }
         }

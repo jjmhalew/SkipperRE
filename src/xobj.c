@@ -182,9 +182,39 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
                 return d_int(1);
             }
             if (!_stricmp(g->fn, "CheckCD")) return d_int(1);   /* D4: staat de cd in het station? De spelbestanden zijn er */
+            if (!_stricmp(g->fn, "PrintMetaFile")) {
+                /* D4 (MMPRINT.DLL): de kleurplaat PIC\PICn als WMF. Wij drukken dezelfde plaat af als bitmap uit de cast
+                 * ("Pic" & n, wat ook op het scherm staat), net als bij de latere cd */
+                const char *p = sarg(ARG(1), b1, sizeof b1), *q = p + strlen(p);
+                while (q > p && isdigit((unsigned char)q[-1])) q--;
+                char nm[32];
+                snprintf(nm, sizeof nm, "Pic%s", q);
+                int id = P.mv ? movie_find_member(P.mv, nm, 0) : 0;
+                CastLib *cl;
+                Member *mm = id ? movie_member(P.mv, id >> 16, id & 0xffff, &cl) : NULL;
+                Bitmap *bm = mm && mm->type == MT_BITMAP ? member_bitmap(cl, mm) : NULL;
+                if (!bm) { vm_error("PrintMetaFile: geen %s", nm); return d_int(0); }
+                uint32_t *px = stage_bitmap_argb(bm);
+                host_print(px, bm->w, bm->h, bm->w > bm->h, "Magnus og Myggen");
+                free(px);
+                return d_int(1);
+            }
             if (!_stricmp(g->fn, "CDPlaying")) return d_int(cd_playing());
             if (!_stricmp(g->fn, "CDStop")) { cd_stop(); return d_int(1); }
-            if (!_stricmp(g->fn, "LoadSaveGame")) return d_int(ld_save_game(d_toint(ARG(2))));
+            if (!_stricmp(g->fn, "LoadSaveGame")) {
+                if (g_headless) {   /* testen: SKIPPER_SLOT=n kiest positie n (opslaan zet de naam "Test") */
+                    const char *e = getenv("SKIPPER_SLOT");
+                    int slot = e ? atoi(e) : 0;
+                    if (slot > 0 && !d_toint(ARG(2))) {
+                        char ini[PLAT_PATH], key[16];
+                        snprintf(ini, sizeof ini, "%s\\MAGNUS.INI", P.save_dir);
+                        snprintf(key, sizeof key, "GAME%d", slot);
+                        ini_set(ini, "Saved games", key, "Test");
+                    }
+                    return d_int(slot);
+                }
+                return d_int(ld_save_game(d_toint(ARG(2))));
+            }
             if (!_stricmp(g->fn, "VkKeyScan")) return d_int(vk_key_scan(d_toint(ARG(1))) & 0xffff);   /* "W": geen toets = 65535 (MMB09 test daarop) */
             if (!_stricmp(g->fn, "InvalidateRect") || !_stricmp(g->fn, "UpdateWindow")) { P.update_needed = 1; return d_int(0); }
             vm_error("MMSYS.%s niet geïmplementeerd", g->fn);

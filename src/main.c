@@ -278,6 +278,9 @@ void player_update_stage(void) { stage_present(); }
  * stappen naar het doel en laat daarna los (zoals een echte gebruiker) */
 static int g_hd_active, g_hd_x0, g_hd_y0, g_hd_x1, g_hd_y1, g_hd_step;
 #define HD_STEPS 12
+/* headless klikken in een wachtlus (`repeat while not the mouseDown`, D4's WantToStop): de frames lopen dan niet door,
+ * dus na een poos wachten geeft host_pump de volgende geplande klik alvast (die telt daarna niet nog eens) */
+static int (*g_hd_clicks)[3], g_hd_nclicks, g_hd_frame, g_hd_wait, g_hd_press;
 
 void host_pump(void) {
     if (g_headless) {
@@ -291,6 +294,21 @@ void host_pump(void) {
                 P.mouse_down = 0;
                 g_hd_active = 0;
             }
+        } else if (g_hd_press) {
+            P.mouse_down = 0;   /* de klik uit de wachtlus: weer los */
+            g_hd_press = 0;
+        } else if (++g_hd_wait > 1000) {
+            int k = -1;
+            for (int i = 0; i < g_hd_nclicks; i++)
+                if (g_hd_clicks[i][2] > g_hd_frame && (k < 0 || g_hd_clicks[i][2] < g_hd_clicks[k][2])) k = i;
+            if (k >= 0) {
+                fprintf(stderr, "[headless] klik %d,%d (frame %d) in een wachtlus\n", g_hd_clicks[k][0], g_hd_clicks[k][1], g_hd_clicks[k][2]);
+                P.mouse_x = g_hd_clicks[k][0]; P.mouse_y = g_hd_clicks[k][1];
+                P.mouse_down = 1;
+                g_hd_clicks[k][2] = -1;
+                g_hd_press = 1;
+            }
+            g_hd_wait = 0;
         }
         return;
     }
@@ -474,6 +492,7 @@ int main(int argc, char **argv) {
     setup_save_dir();
     int nordic = disc_nordic(full), d4 = disc_d4(full);
     if (nordic) { setup_language(lang); set_title(); }
+    else if (d4) g_title = "Magnus og Myggen";   /* de Deense cd van 1996: alleen Deens */
     else if (lang) fprintf(stderr, "[taal] --lang %s: deze cd is alleen Nederlands\n", lang);
     texpack_init(dumptex, hd);
     /* de opstartfilm zit alleen in een projector (START32.EXE, of die in SETUP.EXE): eenmalig naar de opslagmap halen,
@@ -508,7 +527,9 @@ int main(int argc, char **argv) {
     stage_present();
     uint32_t next = now_ms();
     int frames = 0;
+    g_hd_clicks = clicks; g_hd_nclicks = nclicks;
     while (P.halted != 2) {
+        g_hd_frame = frames; g_hd_wait = 0;
         if (!g_headless) {
             host_events();
             if (drain_input()) next = now_ms();

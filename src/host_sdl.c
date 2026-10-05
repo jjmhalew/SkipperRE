@@ -44,9 +44,39 @@ void host_message(const char *text, int warn) {
         SDL_ShowSimpleMessageBox(warn ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION, "Skipper & Skeeto", text, g_win);
 }
 
-/* MMSYS.LoadSaveGame (GetGameNumber in Magnus.dxr) wordt door het spel nergens aangeroepen: opslaan en laden gaan via
- * zijn eigen scherm Mmdlg3. Op Windows staat er toch een dialoog achter; hier niets. */
-int ld_save_game(int is_load) { (void)is_load; return 0; }
+/* MMSYS.LoadSaveGame(hwnd, isLoad): alleen de Deense cd van 1996 (D4) gebruikt hem, de latere cd's hebben hun eigen
+ * scherm Mmdlg3. Een berichtvenster met een knop per positie (namen in MAGNUS.INI [Saved games] GAMEn, zoals op
+ * Windows); laden toont alleen de gebruikte posities. Geeft het nummer, 0 = annuleren. */
+int ld_save_game(int is_load) {
+    if (g_headless) return 0;
+    enum { SLOTS = 8 };
+    char ini[PLAT_PATH], names[SLOTS][64], labels[SLOTS][96];
+    snprintf(ini, sizeof ini, "%s\\MAGNUS.INI", P.save_dir);
+    SDL_MessageBoxButtonData b[SLOTS + 1];
+    int nb = 0;
+    for (int i = 1; i <= SLOTS; i++) {
+        char key[16];
+        snprintf(key, sizeof key, "GAME%d", i);
+        ini_get(ini, "Saved games", key, "", names[i - 1], sizeof names[0]);
+        if (is_load && !names[i - 1][0]) continue;
+        snprintf(labels[i - 1], sizeof labels[0], "%d: %s", i, names[i - 1][0] ? names[i - 1] : UI("(leeg)", "(empty)"));
+        b[nb++] = (SDL_MessageBoxButtonData){0, i, labels[i - 1]};
+    }
+    if (!nb) return 0;   /* laden zonder opgeslagen spel (de D4-cd vraagt het bij elke start): meteen een nieuw spel */
+    b[nb++] = (SDL_MessageBoxButtonData){SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, UI("Annuleren", "Cancel")};
+    SDL_MessageBoxData d = {SDL_MESSAGEBOX_INFORMATION, g_win, is_load ? UI("Spel laden", "Load game") : UI("Spel opslaan", "Save game"),
+                            is_load ? UI("Welk spel?", "Which game?") : UI("Op welke plaats?", "In which slot?"), nb, b, NULL};
+    int slot = 0;
+    if (SDL_ShowMessageBox(&d, &slot) || slot <= 0) return 0;
+    if (!is_load) {
+        char key[16], name[64];
+        snprintf(key, sizeof key, "GAME%d", slot);
+        if (names[slot - 1][0]) snprintf(name, sizeof name, "%s", names[slot - 1]);
+        else snprintf(name, sizeof name, UI("Spel %d", "Game %d"), slot);
+        ini_set(ini, "Saved games", key, name);
+    }
+    return slot;
+}
 
 /* Afdrukken (tekenspel): de tekening als PNG in de opslagmap */
 void host_print(const uint32_t *px, int w, int h, int landscape, const char *name) {
@@ -58,6 +88,7 @@ void host_print(const uint32_t *px, int w, int h, int landscape, const char *nam
     for (int i = 0; i < w * h; i++) { rgb[3 * i] = px[i] >> 16; rgb[3 * i + 1] = px[i] >> 8; rgb[3 * i + 2] = px[i]; }
     int ok = stbi_write_png(path, w, h, 3, rgb, w * 3);
     free(rgb);
+    fprintf(stderr, "[print] %s %dx%d -> %s\n", name, w, h, path);
     char msg[PLAT_PATH + 100];
     snprintf(msg, sizeof msg, ok ? UI("%s is bewaard als\n%s", "%s was saved as\n%s")
                                  : UI("%s kon niet worden bewaard als\n%s", "%s could not be saved as\n%s"), name, path);
