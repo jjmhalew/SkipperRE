@@ -54,8 +54,9 @@ or a folder with a copy of the CD in Android's file picker; the files are copied
 (`Android/data/io.github.jjmhalew.skipperre/files/data`). Saved games and `skipper.log` are in
 `Android/data/io.github.jjmhalew.skipperre/files`.
 
-If you already have a saved game, the start skips the logo and the intro and opens the screen for picking a saved
-game right away. `--intro` plays them anyway, `--nointro` always skips them.
+A click, tap or key press during the logo goes straight on to the intro (the original waited for the logo's tune to
+end). If you already have a saved game, the logo still plays but the intro is skipped: you go straight to the screen
+for picking a saved game. `--intro` plays the intro anyway, `--nointro` skips both the logo and the intro.
 
 ### Controls
 | | Mouse / keyboard | Controller (DualSense, DualShock 4, Xbox, ...) | Touch (Android) |

@@ -2,7 +2,7 @@
  * host_win.c (Windows) of host_sdl.c (Linux, Android).
  *
  *   skipper.exe [datamap] [--movie start] [--bin SKIPPER_1.BIN] [--scale 2] [--fullscreen] [--trace]
- *               [--intro | --nointro]  (logo en intro: altijd / nooit; standaard overgeslagen als er een opgeslagen spel is)
+ *               [--intro | --nointro]  (intro altijd / logo en intro nooit; standaard: geen intro als er een opgeslagen spel is)
  *               [--dumptex] [--hd N]   (texture packs: bitmaps wegschrijven / beeldschaal kiezen, zie texpack.c)
  *               [--shot N out.bmp]   (headless: N frames draaien, stage opslaan, stoppen)
  *               [--click x y F]      (headless: klik op (x,y) vlak voor frame F)
@@ -183,6 +183,8 @@ void input_push(int kind, int x, int y, int a, int b) {
     g_qt = n;
 }
 
+static int logo_tap(void);
+
 /* 1 = een klik of toets vroeg om een ander frame of een andere film (go): de hoofdlus wacht dan niet de rest van
  * dit frame af (bij tempo 8 tot 125 ms), zodat overslaan meteen reageert */
 static int drain_input(void) {
@@ -190,6 +192,7 @@ static int drain_input(void) {
     while (g_qh != g_qt) {
         InEv e = g_q[g_qh];
         g_qh = (g_qh + 1) & 255;
+        if (((e.kind == 1 && !e.a) || e.kind == 3) && logo_tap()) { any = 1; continue; }
         if (e.kind == 1) player_mouse(e.x, e.y, 1, 0, e.a);
         else if (e.kind == 2) player_mouse(e.x, e.y, 0, 1, e.a);
         else player_key(e.a, e.b, e.kind == 3);
@@ -262,11 +265,14 @@ void host_pump(void) {
 }
 
 /* ------------------------------------------------------------------ opening overslaan */
-/* Is er al een opgeslagen spel, dan slaat de start het Ivanoff-logo en de intro over: hij doet wat een klik tijdens het
- * logo doet (start.dxr zet daarvoor mouseDownScript op 'go to "SkipIntro"', nadat het de instellingen gelezen heeft).
- * --intro speelt ze toch altijd, --nointro slaat ze altijd over. */
+/* Eerst het Ivanoff-logo (start.dxr), dan de intro (Intro.dxr: tekenfilm en titel).
+ * - Een klik of toets tijdens het logo: start.dxr springt naar "SkipIntro" en wacht daar tot het deuntje klaar is (na een
+ *   vroege klik, nog op tempo 1, seconden lang). De port stopt het deuntje en gaat meteen naar de intro, zoals frame 35.
+ * - Is er al een opgeslagen spel, dan speelt het logo wel en slaat de start de intro over: meteen naar "IntroEnd" (zet de
+ *   muisactie terug, stopt de muziek, gaat naar Magnus), zonder de frames ertussen te tonen en zonder zijn overgang van 2 s.
+ * --intro speelt de intro toch altijd, --nointro slaat logo en intro altijd over. */
 void lingo_do(const char *s);
-static int g_skip = -1;   /* -1 alleen met een opgeslagen spel, 0 nooit, 1 altijd */
+static int g_skip = -1;   /* -1 de intro alleen met een opgeslagen spel, 0 nooit, 1 logo en intro altijd */
 
 static int saves_exist(void) {   /* zoals SavedGamesExists in Magnus.dxr: een naam in MAGNUS.INI [Saved games] */
     char ini[PLAT_PATH], key[16], v[64];
@@ -278,29 +284,42 @@ static int saves_exist(void) {   /* zoals SavedGamesExists in Magnus.dxr: een na
     return 0;
 }
 
-/* De klik-sprongen, in volgorde: start.dxr 'go to "SkipIntro"' (logo -> intro), Intro.dxr 'go to "Title"' (tekenfilm ->
- * titel) en 'go to "IntroEnd"' (titel -> het spel). Elke sprong één keer, zodra het spel hem als klik-actie zet. */
-static void skip_intro(void) {
-    static const char *steps[] = {"SkipIntro", "Title", "IntroEnd"};
-    static int state, done[3];   /* state: 0 nog niet bekeken, 1 overslaan, 2 klaar */
-    if (state == 2 || !P.mv) return;
-    if (_stricmp(P.mv->name, "start") && _stricmp(P.mv->name, "INTRO")) { state = 2; return; }
+/* logo overslaan, zodra start.dxr het toestaat (frame 1 zet mouseDownScript op 'go to "SkipIntro"', frame 35 leegt hem
+ * en gaat naar de intro). 1 = gedaan, de klik zelf hoeft dan niet meer naar het spel. */
+static int logo_tap(void) {
     Datum d = P.mouse_down_script;
-    if (d.t != T_STR) return;
-    int k = -1;
-    for (int i = 0; i < 3; i++)
-        if (!done[i] && strstr(d.u.s->s, steps[i])) k = i;
-    if (k < 0) return;
-    if (!state) {
-        state = g_skip == 1 || (g_skip < 0 && saves_exist()) ? 1 : 2;
-        if (state == 2) return;
-        fprintf(stderr, "[start] logo en intro overgeslagen\n");
+    if (!P.mv || _stricmp(P.mv->name, "start") || d.t != T_STR || !strstr(d.u.s->s, "SkipIntro")) return 0;
+    sound_stop(1);
+    d_unref(P.mouse_down_script);
+    P.mouse_down_script = d_str("");
+    snprintf(P.pending_movie, sizeof P.pending_movie, "INTRO");
+    P.pending_label[0] = 0;
+    P.pending_frame = 1;
+    return 1;
+}
+
+/* na elke tick; 1 = dit frame niet tonen, meteen de volgende tick */
+static int skip_intro(void) {
+    static int state;   /* 0 nog niet bekeken, 1 overslaan, 2 klaar */
+    if (state == 2 || !P.mv) return 0;
+    if (g_skip == 1 && logo_tap()) return 1;
+    if (_stricmp(P.mv->name, "INTRO")) {
+        if (_stricmp(P.mv->name, "start")) state = 2;
+        return 0;
     }
-    char go[64];
-    snprintf(go, sizeof go, "%s", d.u.s->s);
-    done[k] = 1;
-    lingo_do(go);
-    if (k == 2) state = 2;
+    int end = movie_label(P.mv, "IntroEnd");
+    if (!state) {
+        state = end && (g_skip == 1 || (g_skip < 0 && saves_exist())) ? 1 : 2;
+        if (state == 2) return 0;
+        fprintf(stderr, "[start] intro overgeslagen\n");
+        lingo_do("go to \"IntroEnd\"");
+        return 1;
+    }
+    state = 2;
+    if (P.frame != end) return 0;
+    P.trans_pending = 0;   /* niet 2 s oplossen naar een leeg podium */
+    sound_stop(2);         /* de muziek die frame 1 net startte; IntroEnd stopt hem ook, een tick later */
+    return 1;
 }
 
 /* ------------------------------------------------------------------ start */
@@ -441,7 +460,7 @@ int main(int argc, char **argv) {
         uint32_t t = now_ms();
         if (g_headless || (int32_t)(t - next) >= 0) {
             for (int k = 0; k < nclicks; k++)
-                if (frames == clicks[k][2]) {
+                if (frames == clicks[k][2] && !logo_tap()) {
                     P.mouse_x = clicks[k][0]; P.mouse_y = clicks[k][1];
                     P.mouse_down = 0;   /* headless: de knop geldt meteen als losgelaten */
                     player_mouse(clicks[k][0], clicks[k][1], 1, 0, 0);
@@ -472,10 +491,10 @@ int main(int argc, char **argv) {
                 }
             DBG_CHECK();
             int ms = player_tick();
-            skip_intro();
+            int skipped = skip_intro();   /* overgeslagen: dit frame niet tonen en niet wachten */
             if (g_headless) player_idle();   /* headless: één idle per frame */
             DBG_CHECK();
-            stage_present();
+            if (!skipped) stage_present();
             frames++;
             if (shot && every && frames % every == 0) {
                 char fn[300];
@@ -483,6 +502,7 @@ int main(int argc, char **argv) {
                 stage_screenshot(fn);
                 fprintf(stderr, "[shot] %d %s frame %d\n", frames, P.mv ? P.mv->name : "?", P.frame);
             }
+            if (skipped) ms = 0;
             next = t + (ms > 0 ? ms : 1);
             if (shot && frames >= shot_frames) break;
             if (g_headless && ms > 0) g_vclock += (uint32_t)ms;   /* headless: virtuele tijd, zo snel als het kan */
