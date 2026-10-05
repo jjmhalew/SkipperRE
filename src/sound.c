@@ -18,6 +18,8 @@
 
 typedef struct Voice { Sound *s; double pos, step; int playing; uint32_t start, dur; } Voice;
 static Voice g_v[NCH + 2];
+/* the volume of sound n (0-255): hoort bij het kanaal, niet bij het geluid, en blijft staan tot het spel hem wijzigt */
+static int g_vol[NCH + 2] = {255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
 #ifdef _WIN32
 static HWAVEOUT g_wo;
 static WAVEHDR g_hdr[NBUF];
@@ -42,6 +44,7 @@ static void mix(int16_t *out, int frames) {
         Voice *v = &g_v[c];
         if (!v->playing || !v->s) continue;
         Sound *s = v->s;
+        int vol = g_vol[c];
         for (int i = 0; i < frames; i++) {
             int k = (int)v->pos;
             if (k >= s->frames) {
@@ -52,8 +55,8 @@ static void mix(int16_t *out, int frames) {
             int l, r;
             if (s->channels == 2) { l = s->pcm[2 * k]; r = s->pcm[2 * k + 1]; }
             else l = r = s->pcm[k];
-            acc[2 * i] += l;
-            acc[2 * i + 1] += r;
+            acc[2 * i] += l * vol / 255;
+            acc[2 * i + 1] += r * vol / 255;
             v->pos += v->step;
         }
     }
@@ -199,6 +202,15 @@ int sound_busy(int ch) {
     if (!g_ok) return g_v[ch].playing && (g_v[ch].s->loop || now_ms() - g_v[ch].start < g_v[ch].dur);
     return g_v[ch].playing;
 }
+
+void sound_set_volume(int ch, int vol) {
+    if (ch < 1 || ch > NCH) return;
+    plat_lock();
+    g_vol[ch] = vol < 0 ? 0 : vol > 255 ? 255 : vol;
+    plat_unlock();
+}
+
+int sound_volume(int ch) { return ch >= 1 && ch <= NCH ? g_vol[ch] : 255; }
 
 void sound_set_level(int lvl) {
     if (lvl < 0) lvl = 0;

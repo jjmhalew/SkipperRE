@@ -17,6 +17,7 @@ Datum vm_call_any(int name, Datum *a, int n);
 void lingo_do(const char *s);
 void globals_clear(void);
 int chunk_count(const char *s, int kind);
+Datum chunk_last(Datum str, int kind);
 void stage_text_dirty(Member *m);
 
 #define ARG(i) ((i) < n ? a[i] : VOIDD)
@@ -231,7 +232,8 @@ int sprite_hit(int ch, int x, int y) {
         Bitmap *bm = member_bitmap(cl, m);
         if (bm && bm->w && bm->h && r > l && b > t) {
             int px = (x - l) * bm->w / (r - l), py = (y - t) * bm->h / (b - t);
-            if (bm->px[py * bm->w + px] == 0) return 0;
+            Bitmap *mk = c->ink == 9 ? sprite_mask(c) : NULL;
+            if (mk ? !mask_at(bm, mk, px, py) : bm->px[py * bm->w + px] == 0) return 0;
         }
     }
     return 1;
@@ -477,7 +479,9 @@ static void apply_go(void) {
 }
 
 static void ctx_tick(void) {
-    frame_event(sym("exitFrame"));
+    /* Een go van een klik, toets of enterFrame verplaatst de speelkop al: dan geen exitFrame, anders zet het
+     * gebruikelijke `on exitFrame go(the frame)` hem terug en sluit bijv. de beloningsdialoog (mmdlg5) nooit */
+    if (!CP->going && !CP->pending_movie[0]) frame_event(sym("exitFrame"));
     if (vm_abort) vm_abort = 0;
     apply_go();
     if (vm_abort) vm_abort = 0;
@@ -561,6 +565,7 @@ void player_mouse(int x, int y, int down, int up, int right) {
         int ch = sprite_under(lx, ly, 1);
         P.click_on = ch;
         P.last_click = (int)now_ms();
+        P.click_x = x; P.click_y = y;
         int top = sprite_under(lx, ly, 2);
         if (!right && top && field_editable(CP, top)) { g_focus_ctx = CP; g_focus_ch = top; }
         if (!right && top && CP->ch[top].moveable) {
@@ -688,9 +693,9 @@ Datum player_the(int name) {
     if (!_stricmp(n, "mouseUp")) return d_int(!P.mouse_down);
     if (!_stricmp(n, "mouseH")) { host_pump(); return d_int(P.mouse_x); }
     if (!_stricmp(n, "mouseV")) return d_int(P.mouse_y);
-    if (!_stricmp(n, "clickLoc")) return d_point(P.mouse_x, P.mouse_y);
+    if (!_stricmp(n, "clickLoc")) return d_point(P.click_x, P.click_y);
     if (!_stricmp(n, "doubleClick")) return d_int(0);
-    if (!_stricmp(n, "result")) return VOIDD;
+    if (!_stricmp(n, "result")) return d_ref(vm_result);
     if (!_stricmp(n, "stageLeft") || !_stricmp(n, "stageTop")) return d_int(0);
     if (!_stricmp(n, "stageRight")) return d_int(640);
     if (!_stricmp(n, "stageBottom")) return d_int(480);
@@ -715,6 +720,7 @@ static void sprite_set(int ch, int id, Datum v);
 static Datum member_get(Datum mem, int name);
 static void member_set(Datum mem, int name, Datum v);
 static Datum mkmember(Datum id, Datum lib);
+static int lib_of(Datum lib);
 
 static int S(const char *s) { return sym(s); }
 static const char *MEMBER_PROPS[] = {NULL, "name", "text", "textStyle", "textFont", "textHeight", "textAlign",
@@ -728,14 +734,7 @@ Datum player_get(int type, int id, Datum *tg, int nt) {
         if (id == 2) return d_ref(CP->mouse_up_script);
         if (id == 3) return d_ref(CP->key_down_script);
         if (id == 4) return d_ref(CP->key_up_script);
-        if (id > 11 && nt) {
-            /* the last char/word/item/line in x */
-            Str *s = d_asstr(tg[0]);
-            int kind = id - 11, cnt = chunk_count(s->s, kind);
-            (void)cnt;
-            if (--s->rc == 0) free(s);
-            return VOIDD;
-        }
+        if (id > 11 && nt) return chunk_last(tg[0], id - 11);   /* the last char/word/item/line in x */
         return VOIDD;
     case 1: {
         Str *s = d_asstr(tg[0]);
@@ -743,7 +742,7 @@ Datum player_get(int type, int id, Datum *tg, int nt) {
         if (--s->rc == 0) free(s);
         return d_int(c);
     }
-    case 4: return d_int(255);
+    case 4: return d_int(id == 1 && nt ? sound_volume(d_toint(tg[0])) : 255);   /* the volume of sound n */
     case 6: return sprite_get(d_toint(tg[0]), id);
     case 7:
         switch (id) {
@@ -761,8 +760,9 @@ Datum player_get(int type, int id, Datum *tg, int nt) {
         }
         return d_int(0);
     case 8:
-        if (id == 2) {
-            int lib = nt ? d_toint(tg[0]) : 1;
+        if (id == 2) {   /* the number of castMembers of castLib n / "naam" */
+            int lib = nt ? lib_of(tg[0]) : 1;
+            if (lib == 0) lib = 1;
             if (!CP->mv || lib < 1 || lib > CP->mv->nlibs) return d_int(0);
             CastLib *c = CP->mv->libs[lib - 1];
             return d_int(c->n + c->first - 1);
@@ -790,7 +790,9 @@ void player_set(int type, int id, Datum *tg, int nt, Datum v) {
             return;
         }
         break;
-    case 4: break;
+    case 4:
+        if (id == 1 && nt) sound_set_volume(d_toint(tg[0]), d_toint(v));
+        break;
     case 6: sprite_set(d_toint(tg[0]), id, v); return;   /* sprite_set neemt v over */
     case 7:
         if (id == 26) { P.sound_level = d_toint(v); sound_set_level(P.sound_level); }

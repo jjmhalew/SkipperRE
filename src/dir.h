@@ -274,6 +274,7 @@ extern int vm_dontpass;
 extern int vm_abort;        /* abort / halt */
 extern Script *vm_cur_script;
 extern Datum vm_cur_me;
+extern Datum vm_result;     /* the result */
 
 /* ------------------------------------------------------------------ speler */
 typedef struct Movie {
@@ -325,6 +326,7 @@ typedef struct Player {
     uint32_t start_ms;
     uint32_t timer_base;
     int mouse_x, mouse_y, mouse_down, click_on, last_click, last_roll;
+    int click_x, click_y;     /* the clickLoc: waar de laatste klik begon */
     int key_code; char key[8];
     int sound_level;
     int exit_lock;
@@ -411,6 +413,8 @@ uint32_t *stage_compose_hd(void);   /* beeld op de schaal van het texture pack, 
 int sprite_hit(int ch, int x, int y);
 int sprite_mouse_target(int x, int y);   /* bovenste sprite die de muis opvangt */
 void sprite_rect(int ch, int *l, int *t, int *r, int *b);
+Bitmap *sprite_mask(Channel *c);   /* mask-inkt: 1-bit masker (het volgende castlid) of NULL */
+int mask_at(const Bitmap *bm, const Bitmap *mk, int sx, int sy);
 void stage_present(void);      /* main.c */
 void stage_screenshot(const char *path);
 
@@ -422,6 +426,8 @@ Sound *sound_load_wav(const char *path);
 void sound_stop(int ch);
 int sound_busy(int ch);
 void sound_set_level(int lvl);
+void sound_set_volume(int ch, int vol);   /* the volume of sound ch, 0-255 */
+int sound_volume(int ch);
 void sound_video_play(Sound *s, double offset);
 void sound_video_stop(void);
 const uint32_t *chan_video_frame(Channel *c, int *w, int *h);   /* huidig videoframe van een kanaal */

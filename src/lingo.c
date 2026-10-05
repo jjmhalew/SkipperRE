@@ -12,6 +12,7 @@ int vm_trace = 0;
 int vm_pass = 0, vm_dontpass = 0, vm_abort = 0;
 Script *vm_cur_script;
 Datum vm_cur_me;
+Datum vm_result;   /* the result: wat de laatst afgelopen handler teruggaf */
 
 /* ------------------------------------------------------------------ symbolen */
 static char **g_syms;
@@ -563,6 +564,16 @@ int chunk_count(const char *s, int kind) {
     return c;
 }
 
+/* the last char/word/item/line in str (kind 1..4) */
+Datum chunk_last(Datum str, int kind) {
+    Str *s = d_asstr(str);
+    int v[8] = {0}, cnt = chunk_count(s->s, kind);
+    if (--s->rc == 0) free(s);
+    if (kind < 1 || kind > 4 || cnt < 1) return d_str("");
+    v[(kind - 1) * 2] = cnt;
+    return get_chunk(str, v);
+}
+
 /* put x into/after/before chunk van een string -> nieuwe string */
 static Datum put_chunk(Datum target, int v[8], Datum val, int how) {
     Str *s = d_asstr(target);
@@ -1060,6 +1071,8 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
     vm_cur_script = prev_script;
     g_depth--;
     if (vm_trace) { fprintf(stderr, "%*s< %s = ", g_depth * 2 + 2, "", symname(h->name)); d_print(stderr, fr.ret); fprintf(stderr, "\n"); }
+    d_unref(vm_result);
+    vm_result = d_ref(fr.ret);
     return fr.ret;
 }
 

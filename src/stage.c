@@ -69,6 +69,20 @@ static const uint8_t *matte_of(Bitmap *bm) {
     return mask;
 }
 
+/* mask-inkt (9): het volgende castlid is een 1-bit masker; zwart = tekenen. Masker en plaatje liggen met hun
+ * regPoints op elkaar, dus een andere regPoint van het masker schuift het (zaklamp in kamer I6). */
+Bitmap *sprite_mask(Channel *c) {
+    CastLib *cl;
+    Member *m = CP->mv ? movie_member(CP->mv, c->lib, c->member + 1, &cl) : NULL;
+    Bitmap *mk = m && m->type == MT_BITMAP ? member_bitmap(cl, m) : NULL;
+    return mk && mk->bpp == 1 ? mk : NULL;
+}
+
+int mask_at(const Bitmap *bm, const Bitmap *mk, int sx, int sy) {
+    int mx = sx - bm->reg_x + mk->reg_x, my = sy - bm->reg_y + mk->reg_y;
+    return mx >= 0 && my >= 0 && mx < mk->w && my < mk->h && mk->px[my * mk->w + mx];
+}
+
 static inline uint32_t mix(uint32_t d, uint32_t s, int ink, int blend) {
     int dr = d >> 16 & 255, dg = d >> 8 & 255, db = d & 255;
     int sr = s >> 16 & 255, sg = s >> 8 & 255, sb = s & 255;
@@ -97,6 +111,7 @@ static void draw_bitmap(uint32_t *dst, int ox, int oy, int cw, int ch_, Bitmap *
     int w = r - l, h = b - t, s = g_s;
     if (w <= 0 || h <= 0 || !bm->w || !bm->h) return;
     const uint8_t *mm = c->ink == 8 ? matte_of(bm) : NULL;
+    const Bitmap *mk = c->ink == 9 ? sprite_mask(c) : NULL;
     int ink = c->ink;
     int blend = c->blend ? c->blend : 100;
     if (ink == 32 && c->blend == 0) blend = 100;
@@ -122,7 +137,7 @@ static void draw_bitmap(uint32_t *dst, int ox, int oy, int cw, int ch_, Bitmap *
             if (mm && !mm[i]) continue;
             if (ink == 36 && v == c->back) continue;
             if (ink == 1 && v == 0) continue;
-            if (ink == 9 && v == 0) continue;
+            if (ink == 9 && (mk ? !mask_at(bm, mk, sx, sy) : v == 0)) continue;
             uint32_t sc = g_lut[v];
             if (hrow) {   /* texture pack: kleur uit de vervanging */
                 uint32_t p = hrow[(X - L) * hw / WS];
