@@ -183,14 +183,19 @@ void input_push(int kind, int x, int y, int a, int b) {
     g_qt = n;
 }
 
-static void drain_input(void) {
+/* 1 = een klik of toets vroeg om een ander frame of een andere film (go): de hoofdlus wacht dan niet de rest van
+ * dit frame af (bij tempo 8 tot 125 ms), zodat overslaan meteen reageert */
+static int drain_input(void) {
+    int any = 0;
     while (g_qh != g_qt) {
         InEv e = g_q[g_qh];
         g_qh = (g_qh + 1) & 255;
         if (e.kind == 1) player_mouse(e.x, e.y, 1, 0, e.a);
         else if (e.kind == 2) player_mouse(e.x, e.y, 0, 1, e.a);
         else player_key(e.a, e.b, e.kind == 3);
+        any = 1;
     }
+    return any && (P.going || P.pending_movie[0]);
 }
 
 /* ------------------------------------------------------------------ tonen */
@@ -428,7 +433,11 @@ int main(int argc, char **argv) {
     uint32_t next = now_ms();
     int frames = 0;
     while (P.halted != 2) {
-        if (!g_headless) { host_events(); drain_input(); if (player_drag_update()) stage_present(); }
+        if (!g_headless) {
+            host_events();
+            if (drain_input()) next = now_ms();
+            if (player_drag_update()) stage_present();
+        }
         uint32_t t = now_ms();
         if (g_headless || (int32_t)(t - next) >= 0) {
             for (int k = 0; k < nclicks; k++)
