@@ -336,7 +336,9 @@ static int sprite_event(int ch, int ev) {
 static int sprite_active(int ch) {
     Channel *c = chan(ch);
     if (!c || !c->member) return 0;
-    if (c->script) return 1;
+    /* zoals Director (ScummVM Sprite::isActive): ook een moveable sprite en een knop; MMB10 sleept zijn letters met
+       the clickOn, die zonder dit 0 bleef */
+    if (c->script || c->moveable) return 1;
     CastLib *cl;
     Member *m = chan_member(c, &cl);
     return m && m->script != NULL;
