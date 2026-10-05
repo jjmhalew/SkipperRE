@@ -3,6 +3,13 @@
 #if defined(_WIN32) && !defined(TEXT_TTF)
 #include "dir.h"
 #include <windows.h>
+#include "textlay.h"
+
+static int measure_cb(void *ctx, const char *s, int n) {
+    SIZE sz = {0, 0};
+    if (n > 0) GetTextExtentPoint32A((HDC)ctx, s, n, &sz);
+    return sz.cx;
+}
 
 /* img (w x h, 0xAARRGGBB) wordt wit met de tekst in kleur fc; caret = invoegstreep aan het eind.
  * Geeft de hoogte die de tekst bij breedte w nodig heeft; img NULL = alleen meten. */
@@ -24,35 +31,28 @@ int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
     HGDIOBJ of = SelectObject(dc, f);
     SetTextColor(dc, RGB(fc >> 16 & 255, fc >> 8 & 255, fc & 255));
     SetBkMode(dc, TRANSPARENT);
-    RECT rc = {0, 0, w, h};
-    UINT fmt = DT_WORDBREAK | DT_NOPREFIX | (t->align == 1 ? DT_CENTER : t->align == -1 ? DT_RIGHT : DT_LEFT);
-    /* Director gebruikt \r als regeleinde */
-    int n = (int)strlen(t->text ? t->text : "");
-    char *txt = malloc(n * 2 + 1);
-    int k = 0;
-    for (int i = 0; i < n; i++) {
-        if (t->text[i] == '\r') { txt[k++] = '\r'; txt[k++] = '\n'; }
-        else txt[k++] = t->text[i];
+    UINT fmt = DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP | (t->align == 1 ? DT_CENTER : t->align == -1 ? DT_RIGHT : DT_LEFT);
+    TEXTMETRICA tm;
+    GetTextMetricsA(dc, &tm);
+    int lh = tm.tmHeight;
+    const char *s = t->text ? t->text : "";
+    int nl = text_layout(s, w, measure_cb, dc, NULL, 0);
+    TLine *ln = malloc(sizeof(TLine) * (nl ? nl : 1));
+    text_layout(s, w, measure_cb, dc, ln, nl);
+    int y = -text_scroll(nl, lh, h, img && caret);
+    for (int i = 0; img && i < nl; i++, y += lh) {
+        RECT rc = {0, y, w, y + lh};
+        if (ln[i].n) DrawTextA(dc, ln[i].p, ln[i].n, &rc, fmt);
+        if (caret && i == nl - 1) {   /* invoegpositie aan het eind van de laatste regel */
+            int lw = measure_cb(dc, ln[i].p, ln[i].n);
+            int x = (t->align == 1 ? (w - lw) / 2 : t->align == -1 ? w - lw : 0) + lw;
+            RECT cr = {x + 1, y, x + 2, y + lh};
+            HBRUSH br = CreateSolidBrush(RGB(fc >> 16 & 255, fc >> 8 & 255, fc & 255));
+            FillRect(dc, &cr, br);
+            DeleteObject(br);
+        }
     }
-    txt[k] = 0;
-    RECT need = {0, 0, w, 0};
-    DrawTextA(dc, k ? txt : "X", k ? k : 1, &need, fmt | DT_CALCRECT);   /* leeg veld: één regel hoog */
-    if (img) DrawTextA(dc, txt, k, &rc, fmt);
-    if (img && caret) {
-        /* invoegpositie aan het eind van de laatste regel (links uitgelijnde naamvelden) */
-        const char *last = strrchr(txt, '\n');
-        last = last ? last + 1 : txt;
-        int nl = 0;
-        for (int i = 0; i < k; i++) if (txt[i] == '\n') nl++;
-        SIZE sz = {0, 0}, lh = {0, 0};
-        GetTextExtentPoint32A(dc, last, (int)strlen(last), &sz);
-        GetTextExtentPoint32A(dc, "Ag", 2, &lh);
-        RECT cr = {sz.cx + 1, nl * lh.cy, sz.cx + 2, nl * lh.cy + lh.cy};
-        HBRUSH br = CreateSolidBrush(RGB(fc >> 16 & 255, fc >> 8 & 255, fc & 255));
-        FillRect(dc, &cr, br);
-        DeleteObject(br);
-    }
-    free(txt);
+    free(ln);
     GdiFlush();
     if (img) {
         memcpy(img, bits, (size_t)w * h * 4);
@@ -63,6 +63,6 @@ int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
     SelectObject(dc, ob);
     DeleteObject(hb);
     DeleteDC(dc);
-    return need.bottom;
+    return nl * lh;
 }
 #endif

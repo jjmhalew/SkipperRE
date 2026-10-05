@@ -1,6 +1,6 @@
 /* text_ttf.c - tekstmembers tekenen buiten Windows, met stb_truetype en de ingebouwde Liberation-lettertypen
  * (fonts.h: Sans voor Arial en de rest, Mono voor Courier). Doet na wat GDI's DrawText deed: regels op '\r',
- * afbreken op woordgrenzen binnen de breedte, links / midden / rechts, vet / cursief / onderstreept, geen
+ * afbreken op woordgrenzen binnen de breedte (textlay.h), links / midden / rechts, vet / cursief / onderstreept, geen
  * anti-aliasing. De tekst staat in Windows-1252. */
 #if !defined(_WIN32) || defined(TEXT_TTF)
 #include "dir.h"
@@ -9,6 +9,7 @@
 #define STBTT_STATIC
 #include "stb/stb_truetype.h"
 #include "fonts.h"
+#include "textlay.h"
 
 static stbtt_fontinfo g_font[6];
 static int g_ready;
@@ -71,6 +72,12 @@ static void draw_run(stbtt_fontinfo *f, float sc, const char *s, int n, float x,
     }
 }
 
+typedef struct { stbtt_fontinfo *f; float sc; } MCtx;
+static int measure_cb(void *ctx, const char *s, int n) {
+    MCtx *m = ctx;
+    return (int)ceilf(measure(m->f, m->sc, s, n));
+}
+
 int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
     if (img) for (int i = 0; i < w * h; i++) img[i] = 0xffffffffu;   /* wit = achtergrond */
     stbtt_fontinfo *f = pick(t->font, t->style);
@@ -80,47 +87,32 @@ int text_raster(Text *t, uint32_t *img, int w, int h, uint32_t fc, int caret) {
     stbtt_GetFontVMetrics(f, &asc, &desc, &gap);
     int ascent = (int)ceilf(asc * sc), lh = (int)ceilf((asc - desc) * sc);
     const char *s = t->text ? t->text : "";
-    int y = 0;
+    MCtx mc = {f, sc};
+    int nl = text_layout(s, w, measure_cb, &mc, NULL, 0);
+    TLine *ln = malloc(sizeof(TLine) * (nl ? nl : 1));
+    text_layout(s, w, measure_cb, &mc, ln, nl);
+    int y = -text_scroll(nl, lh, h, img && caret);
     float last_w = 0;
     int last_y = 0;
     fc |= 0xff000000u;
-    for (;;) {   /* per alinea (tot \r of \n) */
-        const char *e = s;
-        while (*e && *e != '\r' && *e != '\n') e++;
-        const char *p = s;
-        do {   /* per regel: zoveel woorden als passen (een te lang woord staat alleen) */
-            const char *q = p, *fit = NULL;
-            while (q < e) {
-                const char *we = q;
-                while (we < e && *we == ' ') we++;
-                while (we < e && *we != ' ') we++;
-                if (fit && measure(f, sc, p, (int)(we - p)) > w) break;
-                fit = q = we;
-            }
-            if (!fit) fit = e;
-            int n = (int)(fit - p);
-            while (n > 0 && p[n - 1] == ' ') n--;
-            float lw = measure(f, sc, p, n);
-            float x = t->align == 1 ? (w - lw) / 2 : t->align == -1 ? w - lw : 0;
-            if (img) draw_run(f, sc, p, n, x, y + ascent, img, w, h, fc);
-            if (img && (t->style & 4)) {   /* onderstreept */
-                int uy = y + ascent + 1;
-                for (int xx = (int)x; xx < (int)(x + lw) && uy < h; xx++) if (xx >= 0 && xx < w) img[uy * w + xx] = fc;
-            }
-            last_w = x + lw;
-            last_y = y;
-            y += lh;
-            p = fit;
-            while (p < e && *p == ' ') p++;
-        } while (p < e);
-        if (!*e) break;
-        s = e + 1;
-        if (*e == '\r' && *s == '\n') s++;
+    for (int i = 0; i < nl; i++, y += lh) {
+        const char *p = ln[i].p;
+        int n = ln[i].n;
+        float lw = measure(f, sc, p, n);
+        float x = t->align == 1 ? (w - lw) / 2 : t->align == -1 ? w - lw : 0;
+        if (img) draw_run(f, sc, p, n, x, y + ascent, img, w, h, fc);
+        if (img && (t->style & 4)) {   /* onderstreept */
+            int uy = y + ascent + 1;
+            for (int xx = (int)x; xx < (int)(x + lw) && uy >= 0 && uy < h; xx++) if (xx >= 0 && xx < w) img[uy * w + xx] = fc;
+        }
+        last_w = x + lw;
+        last_y = y;
     }
+    free(ln);
     if (img && caret) {   /* invoegpositie aan het eind van de laatste regel */
         int cx = (int)last_w + 1;
         for (int yy = last_y; yy < last_y + lh && yy < h; yy++) if (cx >= 0 && cx < w && yy >= 0) img[yy * w + cx] = fc;
     }
-    return y;
+    return nl * lh;
 }
 #endif

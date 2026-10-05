@@ -73,9 +73,10 @@ Third round (score/drawing, input/fields, sound/XObjects; fixed):
       numpad Enter is keyCode 36 on Linux/Android too (MMB02 answers).
 - [x] Mixer interpolates between samples (11/22 kHz sounds at 44.1 kHz without the harsh stair steps).
 - [x] INI XObject `mGetPrivateProfileString` honours its Size argument; DLLGlue `VkKeyScan` returns 65535 for "no key".
-- [ ] Open question: a name longer than the save dialog's `SaveText` field (about 10 letters) is clipped and the
-      slot label shows its end. Did D5 break the long word or scroll the field to the insertion point? Check in the
-      original if possible.
+- [x] Text layout as in Director's TextEdit (`src/textlay.h`, shared by GDI and TTF): a word wider than the field
+      breaks at a letter, and an editable field scrolls so the insertion point stays visible. A long name in the save
+      dialog (`SaveText`, about 10 letters wide) shows its end while typing; the slot label wraps instead of losing its
+      start. All other text renders pixel-identical (regression + intro/tutorial/room/options shots).
 - Not used by the game, left as they are: tempo waits/delays, trails, inks other than 0/8/9/32/36, shape types and
   patterns (all shapes are invisible hotspots), score blend (only in an unreachable frame), fade to black/white and
   colour cycling, timeouts, `selStart/selEnd`, markers, `play done`, ADPCM WAVs.
