@@ -118,7 +118,9 @@ typedef struct DFile {
     int nchunks;
     KeyEnt *keys;
     int nkeys;
+    int ver;            /* directorVersion uit VWCF: 0x45d = Director 4, 0x4c1 = Director 5 (0: geen VWCF) */
 } DFile;
+#define DFILE_D4(f) ((f)->ver && (f)->ver < 0x4c1)
 
 DFile *dfile_open(const char *path);
 const uint8_t *dfile_chunk(DFile *f, int id, uint32_t *size);
@@ -182,6 +184,7 @@ typedef struct Member {
     int rect_l, rect_t, rect_r, rect_b;
     int purge;
     uint32_t info_flags; /* vlaggen uit de info-kop; geluid: 16 = niet herhalen */
+    int script_id;       /* info-kop: nummer van zijn script in de Lctx (1..); D4 koppelt scripts zo */
     char *file;         /* gekoppeld bestand (digitalVideo), zonder map */
     struct Video *video;
     int video_failed;
@@ -223,6 +226,8 @@ typedef struct Frame {
     uint16_t snd1_lib, snd1, snd2_lib, snd2, trans_lib, trans;
     uint8_t tempo, pal_speed, pal_flags;
     int16_t pal_lib, pal;
+    uint8_t trans_type, trans_chunk, trans_area;   /* D4: transitie in het frame zelf (D5: een transitielid) */
+    uint16_t trans_ms;
     SprRec spr[48];
 } Frame;
 
@@ -256,6 +261,7 @@ typedef struct Script {
     Datum *lits;
     int nnames;
     int *names;         /* Lnam-index -> symbool */
+    int esz;            /* operand van literal/arg/local = index x esz: 8 (D5), 6 (D4) */
 } Script;
 
 void scripts_load(CastLib *c);
@@ -351,6 +357,7 @@ typedef struct Player {
     int stage_color;
     char base_dir[260];
     char save_dir[260];
+    char main_name[16];    /* D4 (Deense cd 1996): de hoofdfilm "magnus" uit MAGNUS.EXE, in de opslagmap */
     char start_name[16];   /* opstartfilm in de opslagmap: "start", of "start_nordic" bij de Scandinavische cd */
     char bin_path[260];
     int trans_pending, trans_type, trans_dur, trans_chunk;
@@ -401,6 +408,8 @@ int xobj_print_cmd(const char *cmd, Datum *a, int n);   /* 1 als a[0] een PrintO
 int disc_find_data(const char *data, const char *image, const char *appdir, char *out, int n, char *bin_out, int nbin);
 int disc_make_start(const char *dir, const char *dst);   /* start.dxr uit START32.EXE of SETUP.EXE in dir */
 int disc_nordic(const char *dir);   /* 1: de Scandinavische cd (Deens, Noors, Zweeds, Fins), 0: de Nederlandse */
+int disc_d4(const char *dir);
+int disc_make_main_d4(const char *dir, const char *dst);
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
 int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_out, int nbin);   /* gekozen image of map */
 int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen);

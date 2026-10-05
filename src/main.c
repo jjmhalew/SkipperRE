@@ -62,9 +62,13 @@ static void setup_save_dir(void) {
     if (!plat_exists(f)) {
         FILE *fp = fopen(f, "wb");
         if (fp) {
-            fprintf(fp, "[MAGNUS]\r\nPath=\"%s\\\"\r\n[Sound]\r\nStartLevel=4\r\n", P.save_dir);
+            fprintf(fp, "[MAGNUS]\r\nPath=%s\\\r\n[Sound]\r\nStartLevel=4\r\n", P.save_dir);
             fclose(fp);
         }
+    } else {   /* zonder aanhalingstekens: de D4-cd leest deze regel zelf met FileIO (eerdere versies schreven "...") */
+        char dir[300];
+        snprintf(dir, sizeof dir, "%s\\", P.save_dir);
+        ini_set(f, "MAGNUS", "Path", dir);
     }
 }
 
@@ -458,7 +462,7 @@ int main(int argc, char **argv) {
     }
     player_init(full);
     setup_save_dir();
-    int nordic = disc_nordic(full);
+    int nordic = disc_nordic(full), d4 = disc_d4(full);
     if (nordic) { setup_language(lang); set_title(); }
     else if (lang) fprintf(stderr, "[taal] --lang %s: deze cd is alleen Nederlands\n", lang);
     texpack_init(dumptex, hd);
@@ -468,7 +472,15 @@ int main(int argc, char **argv) {
     char sd[PLAT_PATH], sd2[PLAT_PATH];
     snprintf(sd, sizeof sd, "%s\\start.dxr", full);
     snprintf(sd2, sizeof sd2, "%s\\%s.dxr", P.save_dir, P.start_name);
-    if (!vfs_exists(sd) && !vfs_exists(sd2)) {
+    if (d4) {   /* Deense cd van 1996: geen start.dxr; de projector MAGNUS.EXE speelt de hoofdfilm "magnus" */
+        snprintf(P.main_name, sizeof P.main_name, "magnus_d4");
+        snprintf(sd2, sizeof sd2, "%s\\%s.dxr", P.save_dir, P.main_name);
+        if (!vfs_exists(sd2)) {
+            fprintf(stderr, "[disc] hoofdfilm uit MAGNUS.EXE halen ...\n");
+            if (!disc_make_main_d4(full, sd2)) fprintf(stderr, "[disc] geen film in MAGNUS.EXE\n");
+        }
+        if (!strcmp(movie, "start")) movie = "magnus";
+    } else if (!vfs_exists(sd) && !vfs_exists(sd2)) {
         fprintf(stderr, "[disc] start.dxr uit START32.EXE of SETUP.EXE halen ...\n");
         if (!disc_make_start(full, sd2)) fprintf(stderr, "[disc] start.dxr niet gevonden in %s\n", full);
     }

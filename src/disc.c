@@ -212,11 +212,14 @@ static void wr32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v
 /* De projector bevat een APPL-RIFX (achter de '59JP'-kop) met File-chunks; de eerste MV93-film is
  * 'start'. Zijn mmap-offsets zijn absoluut in de exe en worden teruggerekend (zie tools/projector.py). */
 static int projector_start(const uint8_t *exe, size_t n, const char *dst) {
-    size_t pj = 0;
-    for (size_t i = 0; i + 8 <= n; i++) if (!memcmp(exe + i, "59JP", 4)) pj = i;
-    if (!pj) return 0;
-    uint32_t appl = rd32(exe + pj + 4);
-    if (appl + 32 > n || memcmp(exe + appl, "XFIR", 4) || memcmp(exe + appl + 8, "LPPA", 4)) return 0;
+    /* kop "59JP" (Director 5) of "PJ93" (Director 4) met de offset van de APPL-RIFX erachter */
+    uint32_t appl = 0;
+    for (size_t i = 0; i + 8 <= n && !appl; i++)
+        if (!memcmp(exe + i, "59JP", 4) || !memcmp(exe + i, "PJ93", 4)) {
+            uint32_t a = rd32(exe + i + 4);
+            if (a + 32 <= n && !memcmp(exe + a, "XFIR", 4) && !memcmp(exe + a + 8, "LPPA", 4)) appl = a;
+        }
+    if (!appl) return 0;
     uint32_t mm = rd32(exe + appl + 24);
     if (mm + 24 > n) return 0;
     int hl = rd16(exe + mm + 8), el = rd16(exe + mm + 10);
@@ -443,10 +446,28 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
 }
 
 /* ------------------------------------------------------------------ zoeken */
+int disc_d4(const char *dir) {   /* Deense cd van 1996 (Director 4): hoofdfilm in MAGNUS.EXE, MAGNUS0/1.DXR */
+    char p[600], q[600];
+    snprintf(p, sizeof p, "%s\\MAGNUS0.DXR", dir);
+    snprintf(q, sizeof q, "%s\\MAGNUS.EXE", dir);
+    return vfs_exists(p) && vfs_exists(q);
+}
+
+/* de hoofdfilm van de D4-cd uit de projector MAGNUS.EXE halen */
+int disc_make_main_d4(const char *dir, const char *dst) {
+    char p[PLAT_PATH];
+    size_t n;
+    snprintf(p, sizeof p, "%s\\MAGNUS.EXE", dir);
+    uint8_t *b = read_file(p, &n);
+    int ok = b && projector_start(b, n, dst);
+    free(b);
+    return ok;
+}
+
 static int has_game(const char *dir) {
     char p[600];
     snprintf(p, sizeof p, "%s\\Magnus.dxr", dir);
-    return file_exists(p);
+    return file_exists(p) || disc_d4(dir);
 }
 
 int disc_nordic(const char *dir) {

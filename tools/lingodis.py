@@ -45,8 +45,9 @@ class Handler:
 
 
 class Script:
-    def __init__(self, b, names):
+    def __init__(self, b, names, esz=8):
         self.names = names
+        self.esz = esz  # operand van literals/args/locals: index x 8 (D5) of x 6 (D4)
         be = lambda f, o: struct.unpack_from('>' + f, b, o)
         self.number = be('H', 18)[0]
         self.flags, _, self.cast_id, self.factory_name = be('IhiH', 38)
@@ -57,7 +58,7 @@ class Script:
         # literals
         self.literals = []
         for i in range(lc):
-            typ, off = be('II', lo + i * 8)
+            typ, off = be('II', lo + i * 8) if esz == 8 else be('HI', lo + i * 6)
             if typ == 4:
                 self.literals.append(off)  # integer
             elif typ in (1, 2):  # string / symbool?
@@ -124,6 +125,10 @@ def decode(code):
 def scripts_of(rf):
     """Alle scripts in een bestand: [(lctx chunk id, index, Script)]."""
     res = []
+    esz = 8
+    for cf in rf.by_tag.get('VWCF', [])[:1]:  # Director 4 (versie < 0x4c1): literals van 6 bytes
+        if struct.unpack_from('>H', rf.chunk_data(cf), 36)[0] < 0x4c1:
+            esz = 6
     for lctx in rf.by_tag.get('Lctx', []) + rf.by_tag.get('LctX', []):
         b = rf.chunk_data(lctx)
         if len(b) < 36:  # lege context (cast zonder scripts)
@@ -136,7 +141,7 @@ def scripts_of(rf):
             _, sec, _, _ = struct.unpack_from('>iiHH', b, eoff + k * 12)
             if sec < 0 or sec >= len(rf.chunks) or rf.chunks[sec].tag != 'Lscr':
                 continue
-            res.append((lctx.id, k + 1, Script(rf.chunk_data(sec), names)))
+            res.append((lctx.id, k + 1, Script(rf.chunk_data(sec), names, esz)))
     return res
 
 
@@ -144,7 +149,7 @@ def fmt_arg(s, op, arg):
     if op in NAME_OPS:
         return s.name(arg)
     if op == 'pushcons':
-        v = s.literals[arg // 8] if arg // 8 < len(s.literals) else ('lit', arg)
+        v = s.literals[arg // s.esz] if arg // s.esz < len(s.literals) else ('lit', arg)
         return repr(v)
     return '' if arg is None else str(arg)
 

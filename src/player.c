@@ -19,6 +19,7 @@ void lingo_do(const char *s);
 void globals_clear(void);
 int chunk_count(const char *s, int kind);
 Datum chunk_last(Datum str, int kind);
+extern char g_item_delim;   /* the itemDelimiter (lingo.c) */
 void stage_text_dirty(Member *m);
 
 #define ARG(i) ((i) < n ? a[i] : VOIDD)
@@ -62,9 +63,10 @@ static Movie *movie_get(const char *name) {
     const char *dirs[2] = {P.base_dir, P.save_dir};
     for (int d = 0; d < 2 && !mv; d++)
         for (int i = 0; exts[i] && !mv && dirs[d][0]; i++) {
-            const char *k = d == 1 && !_stricmp(key, "start") && P.start_name[0] ? P.start_name : key;
+            const char *k = d == 1 && !_stricmp(key, "start") && P.start_name[0] ? P.start_name
+                          : d == 1 && !_stricmp(key, "magnus") && P.main_name[0] ? P.main_name : key;
             snprintf(path, sizeof path, "%s/%s%s", dirs[d], k, exts[i]);
-            if (vfs_exists(path) && (mv = movie_load(path)) && k != key) snprintf(mv->name, sizeof mv->name, "start");
+            if (vfs_exists(path) && (mv = movie_load(path)) && k != key) snprintf(mv->name, sizeof mv->name, "%s", key);
         }
     if (!mv) { vm_error("film niet gevonden: %s", name); return NULL; }
     if (g_nmovies < 64) {
@@ -341,7 +343,7 @@ static int sprite_active(int ch) {
     if (c->script || c->moveable) return 1;
     CastLib *cl;
     Member *m = chan_member(c, &cl);
-    return m && m->script != NULL;
+    return m && (m->script != NULL || m->type == MT_BUTTON);
 }
 
 /* Sprite die de muis opvangt: met script, moveable, editable of met een eigen cursor. Een kale sprite
@@ -450,6 +452,12 @@ static void enter_frame(int first) {
                 P.trans_area = !(m->spec[3] & 1);   /* bit 0 = hele podium, anders alleen wat verandert (ScummVM) */
                 if (P.trans_dur <= 0) P.trans_dur = 100;   /* 0 = zo snel mogelijk */
             }
+        } else if (fr->trans_type && !first) {   /* D4: de transitie staat in het frame */
+            P.trans_pending = 1;
+            P.trans_chunk = fr->trans_chunk;
+            P.trans_type = fr->trans_type;
+            P.trans_dur = fr->trans_ms > 0 ? fr->trans_ms : 100;
+            P.trans_area = fr->trans_area;
         }
     }
     /* de actorList (P.actor_list) hoort bij de film op het podium: niet stappen in een dialoogvenster,
@@ -798,6 +806,7 @@ Datum player_the(int name) {
     if (!_stricmp(n, "platform")) return str_of("Windows,32");
     if (!_stricmp(n, "machineType")) return d_int(256);
     if (!_stricmp(n, "maxInteger")) return d_int(0x7fffffff);
+    if (!_stricmp(n, "itemDelimiter")) { char d[2] = {g_item_delim, 0}; return str_of(d); }
     if (!_stricmp(n, "paramCount")) return d_int(0);
     vm_error("the %s: onbekend", n);
     return VOIDD;
@@ -1251,6 +1260,11 @@ Datum player_movie_prop(int name) {
 void player_set_movie_prop(int name, Datum v) {
     const char *n = symname(name);
     if (!_stricmp(n, "actorList")) { d_unref(P.actor_list); P.actor_list = v; return; }
+    if (!_stricmp(n, "itemDelimiter")) {
+        char d[8];
+        d_tostr(v, d, sizeof d);
+        g_item_delim = d[0] ? d[0] : ',';
+    }
     d_unref(v);
 }
 
@@ -1626,6 +1640,22 @@ void player_init(const char *base_dir) {
     memcpy(P.pal, g_mac_pal, 768);
     builtins_register();
     xobj_register();
+    /* LINGO.INI (startup): de openxlib-regels (D4: openxlib "fileio"); de cd-stationsletter van de installer niet */
+    char li[PLAT_PATH], line[256];
+    snprintf(li, sizeof li, "%s\\LINGO.INI", base_dir);
+    FILE *lf = fopen(li, "rb");
+    while (lf && fgets(line, sizeof line, lf)) {
+        char *q = line;
+        while (*q == ' ' || *q == '\t') q++;
+        char *o = strchr(q, '"'), *e = o ? strchr(o + 1, '"') : NULL;
+        if (!_strnicmp(q, "openxlib", 8) && o && e) {
+            *e = 0;
+            Datum arg = d_str(o + 1);
+            bi_openXLib(&arg, 1);
+            d_unref(arg);
+        }
+    }
+    if (lf) fclose(lf);
     /* LINGO.INI: de installer zet hier de cd-stationsletter; wij wijzen naar de datamap */
     *global_ref(sym("gCDDrive")) = d_str("CD");
 }

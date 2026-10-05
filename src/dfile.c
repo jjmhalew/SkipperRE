@@ -40,6 +40,8 @@ DFile *dfile_open(const char *path) {
         f->chunks[i].size = rd32(f, e + 4);
         f->chunks[i].off = rd32(f, e + 8);
     }
+    int vc = dfile_first(f, FOURCC('V', 'W', 'C', 'F'));
+    if (vc >= 0 && f->chunks[vc].size >= 38) f->ver = be16(f->data + f->chunks[vc].off + 8 + 36);
     int k = dfile_first(f, FOURCC('K', 'E', 'Y', '*'));
     if (k >= 0) {
         const uint8_t *b = f->data + f->chunks[k].off + 8;
@@ -107,13 +109,25 @@ CastLib *cast_load(DFile *f, int first, int lib, int owner) {
         uint32_t csz;
         const uint8_t *cb = dfile_chunk(f, id, &csz);
         Member *m = &c->m[i];
-        m->type = (int)be32(cb);
-        uint32_t info_len = be32(cb + 4), spec_len = be32(cb + 8);
-        const uint8_t *info = cb + 12;
-        m->spec = cb + 12 + info_len;
+        uint32_t info_len, spec_len;
+        const uint8_t *info;
+        if (DFILE_D4(f)) {   /* D4: u16 datalengte (incl. type en vlaggen), u32 infolengte, u8 type, u8 vlaggen, data, info */
+            uint32_t dl = be16(cb);
+            info_len = be32(cb + 2);
+            m->type = cb[6];
+            m->spec = cb + (dl > 1 ? 8 : 7);
+            spec_len = dl > 1 ? dl - 2 : 0;
+            info = cb + 6 + dl;
+        } else {
+            m->type = (int)be32(cb);
+            info_len = be32(cb + 4); spec_len = be32(cb + 8);
+            info = cb + 12;
+            m->spec = cb + 12 + info_len;
+        }
         m->speclen = spec_len;
         m->cast_chunk = id;
         if (info_len >= 16) m->info_flags = be32(info + 12);
+        if (info_len >= 20) m->script_id = (int)be32(info + 16);
         /* info: offset naar data, daar u16 aantal + offsets; item 1 = naam */
         if (info_len >= 20) {
             uint32_t doff = be32(info);
@@ -177,6 +191,9 @@ Bitmap *member_bitmap(CastLib *c, Member *m) {
         b->bpp = s[23];
         b->clut_lib = (int16_t)be16(s + 24);
         b->clut = (int16_t)be16(s + 26);
+    } else if ((flags & 0x8000) && m->speclen >= 26 && DFILE_D4(c->f)) {   /* D4: bpp, clut zonder castLib */
+        b->bpp = s[23];
+        b->clut = (int16_t)be16(s + 24);
     }
     if (b->w <= 0 || b->h <= 0) { b->w = b->h = 0; b->px = calloc(1, 1); m->bmp = b; return b; }
     int need = b->pitch * b->h;
@@ -480,6 +497,11 @@ void scripts_load(CastLib *c) {
             sc->nnames = ncnt;
             uint32_t castid = be32(s + 44);
             sc->member = castid & 0xffff;
+            if (DFILE_D4(f)) {   /* D4: het castid in Lscr klopt niet altijd; het lid noemt zijn script (info scriptId) */
+                sc->member = 0;
+                for (int i = 0; i < c->n; i++)
+                    if (c->m[i].type && c->m[i].script_id == k + 1) { sc->member = c->first + i; break; }
+            }
             const uint8_t *q = s + 50;
             /* hvc hvo hvs pc po gc go hc ho lc lo ldc ldo */
             int pc = be16(q + 10); uint32_t po = be32(q + 12);
@@ -496,8 +518,10 @@ void scripts_load(CastLib *c) {
             for (int i = 0; i < gc; i++) sc->globals[i] = NAME(be16(s + go + 2 * i));
             sc->nlits = lc;
             sc->lits = calloc(lc + 1, sizeof(Datum));
+            sc->esz = DFILE_D4(f) ? 6 : 8;   /* D4: u16 type + u32 waarde */
             for (int i = 0; i < lc; i++) {
-                uint32_t typ = be32(s + lo + i * 8), off = be32(s + lo + i * 8 + 4);
+                const uint8_t *le = s + lo + i * sc->esz;
+                uint32_t typ = sc->esz == 6 ? be16(le) : be32(le), off = be32(le + sc->esz - 4);
                 if (typ == 4) sc->lits[i] = d_int((int32_t)off);
                 else if (typ == 1 || typ == 2) {
                     uint32_t n = be32(s + ldo + off);
@@ -555,7 +579,10 @@ Handler *script_handler(Script *s, int name) {
 }
 
 /* ------------------------------------------------------------------ score */
+static void score_parse_d4(Score *sc, const uint8_t *b, uint32_t sz);
+
 static void score_parse(Score *sc, const uint8_t *b, uint32_t sz) {
+    if (b && sz >= 20 && be16(b + 14) == 20) { score_parse_d4(sc, b, sz); return; }   /* D4: sprites van 20 bytes */
     memset(sc, 0, sizeof *sc);
     if (!b || sz < 20) return;
     uint32_t size = be32(b), f1 = be32(b + 4);
@@ -597,6 +624,57 @@ static void score_parse(Score *sc, const uint8_t *b, uint32_t sz) {
             r->locv = (int16_t)be16(s + 12); r->loch = (int16_t)be16(s + 14);
             r->h = (int16_t)be16(s + 16); r->w = (int16_t)be16(s + 18);
             r->blend = s[21];
+        }
+        p = end;
+    }
+    free(buf);
+}
+
+/* Director 4: hoofdkanalen 40 bytes (ScummVM Frame::readMainChannelsD4), sprites 20 bytes (readSpriteDataD4); alles in
+ * cast 1. De transitie staat in het frame: type, duur in kwartseconden (bit 7 = hele podium), chunk. */
+static void score_parse_d4(Score *sc, const uint8_t *b, uint32_t sz) {
+    memset(sc, 0, sizeof *sc);
+    uint32_t size = be32(b), f1 = be32(b + 4);
+    int sprsize = be16(b + 14), nchan = be16(b + 16);
+    if (size > sz) size = sz;
+    sc->nchan = nchan;
+    int buflen = 40 + nchan * sprsize;
+    uint8_t *buf = calloc(buflen + 64, 1);
+    int cap = 16;
+    sc->f = calloc(cap, sizeof(Frame));
+    uint32_t p = f1;
+    while (p + 2 <= size) {
+        int flen = be16(b + p);
+        if (flen < 2) break;
+        uint32_t q = p + 2, end = p + flen;
+        while (q + 4 <= end) {
+            int ln = be16(b + q), off = be16(b + q + 2);
+            if (off + ln <= buflen) memcpy(buf + off, b + q + 4, ln);
+            q += 4 + ln;
+        }
+        if (sc->nframes == cap) { cap *= 2; sc->f = realloc(sc->f, cap * sizeof(Frame)); }
+        Frame *fr = &sc->f[sc->nframes++];
+        memset(fr, 0, sizeof *fr);
+        fr->trans_ms = (buf[2] & 0x7f) * 250;
+        fr->trans_area = !(buf[2] & 0x80);
+        fr->trans_chunk = buf[3];
+        fr->tempo = buf[4];
+        fr->trans_type = buf[5];
+        fr->snd1 = be16(buf + 6); fr->snd2 = be16(buf + 8);
+        fr->script = be16(buf + 16);
+        fr->pal = (int16_t)be16(buf + 20);
+        fr->pal_flags = buf[24]; fr->pal_speed = buf[25];
+        for (int ch = 0; ch < 48 && ch < nchan - 2; ch++) {
+            const uint8_t *s = buf + 40 + ch * sprsize;
+            SprRec *r = &fr->spr[ch];
+            r->type = s[1];
+            r->fore = s[2]; r->back = s[3];
+            r->ink = s[5] & 0x3f; r->trails = (s[5] & 0x40) != 0; r->stretch = (s[5] & 0x80) != 0;
+            r->member = be16(s + 6);
+            r->locv = (int16_t)be16(s + 8); r->loch = (int16_t)be16(s + 10);
+            r->h = (int16_t)be16(s + 12); r->w = (int16_t)be16(s + 14);
+            r->smember = be16(s + 16);
+            r->blend = s[19];
         }
         p = end;
     }
@@ -646,8 +724,8 @@ Movie *movie_load(const char *path) {
         min_member = be16(cf + 12);
         mv->stage_color = be16(cf + 26);
         mv->tempo = (int16_t)be16(cf + 54);
-        mv->def_pal_lib = (int16_t)be16(cf + 76);
-        mv->def_pal = (int16_t)be16(cf + 78);
+        mv->def_pal_lib = DFILE_D4(f) ? 0 : (int16_t)be16(cf + 76);
+        mv->def_pal = (int16_t)be16(cf + (DFILE_D4(f) ? 70 : 78));   /* D4: zonder castLib, op 70 */
     }
     const uint8_t *sb = dfile_chunk(f, dfile_child(f, MOVIE, FOURCC('V', 'W', 'S', 'C')), &sz);
     score_parse(&mv->score, sb, sz);

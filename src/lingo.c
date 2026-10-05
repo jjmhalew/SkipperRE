@@ -485,6 +485,8 @@ static int is_delim(char c, int kind, char item_delim) {
     return 0;
 }
 
+char g_item_delim = ',';   /* the itemDelimiter (D4: GetExternPath knipt op "=") */
+
 /* zoek bereik [*b, *e) van chunk first..last (1-based) van soort kind in s[0..n) */
 static void chunk_range(const char *s, int n, int kind, int first, int last, int *b, int *e) {
     if (last < first) last = first;
@@ -494,7 +496,7 @@ static void chunk_range(const char *s, int n, int kind, int first, int last, int
         if (*b < 0) *b = 0;
         return;
     }
-    char idl = ',';
+    char idl = g_item_delim;
     int idx = 1, i = 0, start = -1, end = n;
     if (kind == 2) {
         /* woorden: reeksen niet-spaties */
@@ -549,17 +551,17 @@ int chunk_count(const char *s, int kind) {
     if (kind == 2) {
         int c = 0, i = 0;
         while (i < n) {
-            while (i < n && is_delim(s[i], 2, ',')) i++;
+            while (i < n && is_delim(s[i], 2, g_item_delim)) i++;
             if (i >= n) break;
             c++;
-            while (i < n && !is_delim(s[i], 2, ',')) i++;
+            while (i < n && !is_delim(s[i], 2, g_item_delim)) i++;
         }
         return c;
     }
     if (n == 0) return 0;
     int c = 1;
     for (int i = 0; i < n; i++)
-        if (is_delim(s[i], kind, ',')) c++;
+        if (is_delim(s[i], kind, g_item_delim)) c++;
     if (kind == 4 && (s[n - 1] == '\r' || s[n - 1] == '\n')) c--;
     return c;
 }
@@ -586,14 +588,14 @@ static Datum put_chunk(Datum target, int v[8], Datum val, int how) {
         if (!idx[k][0]) continue;
         if (how != 4 && (kinds[k] == 3 || kinds[k] == 4)) {
             int have = 1;
-            for (int i = b; i < e; i++) have += is_delim(s->s[i], kinds[k], ',');
+            for (int i = b; i < e; i++) have += is_delim(s->s[i], kinds[k], g_item_delim);
             if (idx[k][0] > have) {   /* aanvullen: scheidingstekens achter dit bereik invoegen */
                 int add = idx[k][0] - have;
                 Str *n = malloc(sizeof(Str) + s->len + add + 1);
                 n->rc = 1;
                 n->len = s->len + add;
                 memcpy(n->s, s->s, e);
-                memset(n->s + e, kinds[k] == 3 ? ',' : '\r', add);
+                memset(n->s + e, kinds[k] == 3 ? g_item_delim : '\r', add);
                 memcpy(n->s + e + add, s->s + e, s->len - e + 1);
                 if (--s->rc == 0) free(s);
                 s = n;
@@ -609,11 +611,11 @@ static Datum put_chunk(Datum target, int v[8], Datum val, int how) {
     if (how == 4 && last >= 2 && b < e) {
         if (last == 2) {   /* woord: de spaties erachter mee, of ervoor bij het laatste woord */
             int e2 = e;
-            while (e2 < pe && is_delim(s->s[e2], 2, ',')) e2++;
+            while (e2 < pe && is_delim(s->s[e2], 2, g_item_delim)) e2++;
             if (e2 > e) e = e2;
-            else while (b > pb && is_delim(s->s[b - 1], 2, ',')) b--;
-        } else if (e < pe && is_delim(s->s[e], last, ',')) e++;
-        else if (b > pb && is_delim(s->s[b - 1], last, ',')) b--;
+            else while (b > pb && is_delim(s->s[b - 1], 2, g_item_delim)) b--;
+        } else if (e < pe && is_delim(s->s[e], last, g_item_delim)) e++;
+        else if (b > pb && is_delim(s->s[b - 1], last, g_item_delim)) b--;
     }
     if (how == 4) how = 1;
     Str *x = d_asstr(val);
@@ -780,8 +782,8 @@ static Datum *var_slot(int vt, Datum id, Datum lib, Datum *field_tmp) {
         }
         return global_ref(nm);
     }
-    case 4: { int i = d_toint(id) / 8; return f && i < f->nargs ? &f->args[i] : NULL; }
-    case 5: { int i = d_toint(id) / 8; return f && i < f->h->nlocals ? &f->locals[i] : NULL; }
+    case 4: { int i = f ? d_toint(id) / f->s->esz : 0; return f && i < f->nargs ? &f->args[i] : NULL; }
+    case 5: { int i = f ? d_toint(id) / f->s->esz : 0; return f && i < f->h->nlocals ? &f->locals[i] : NULL; }
     case 6:
         *field_tmp = player_field(id, lib);
         return field_tmp;
@@ -890,20 +892,20 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             break;
         case 0x42: push(make_args(arg, 1)); break;
         case 0x43: push(make_args(arg, 0)); break;
-        case 0x44: { int i = arg / 8; push(i < s->nlits ? d_ref(s->lits[i]) : VOIDD); break; }
+        case 0x44: { int i = arg / s->esz; push(i < s->nlits ? d_ref(s->lits[i]) : VOIDD); break; }
         case 0x45: push(d_sym(NAME(arg))); break;
         case 0x46: { Datum d = {T_VARREF}; d.u.i = NAME(arg); push(d); break; }
         case 0x48: case 0x49: push(d_ref(*global_ref(NAME(arg)))); break;
         case 0x4a: { Datum id = d_sym(NAME(arg)); Datum t; Datum *p = var_slot(3, id, VOIDD, &t); push(p ? d_ref(*p) : VOIDD); break; }
-        case 0x4b: { int i = arg / 8; push(i < fr.nargs ? d_ref(fr.args[i]) : VOIDD); break; }
-        case 0x4c: { int i = arg / 8; push(i < h->nlocals ? d_ref(fr.locals[i]) : VOIDD); break; }
+        case 0x4b: { int i = arg / s->esz; push(i < fr.nargs ? d_ref(fr.args[i]) : VOIDD); break; }
+        case 0x4c: { int i = arg / s->esz; push(i < h->nlocals ? d_ref(fr.locals[i]) : VOIDD); break; }
         case 0x4e: case 0x4f: { Datum *p = global_ref(NAME(arg)); d_unref(*p); *p = pop(); break; }
         case 0x50: { Datum id = d_sym(NAME(arg)); Datum t; Datum v = pop();
             if (fr.nargs > 0 && fr.args[0].t == T_OBJ) obj_setprop(fr.args[0].u.o, id.u.i, v);
             else { Datum *p = var_slot(3, id, VOIDD, &t); if (p) { d_unref(*p); *p = v; } else d_unref(v); }
             break; }
-        case 0x51: { int i = arg / 8; Datum v = pop(); if (i < fr.nargs) { d_unref(fr.args[i]); fr.args[i] = v; } else d_unref(v); break; }
-        case 0x52: { int i = arg / 8; Datum v = pop(); if (i < h->nlocals) { d_unref(fr.locals[i]); fr.locals[i] = v; } else d_unref(v); break; }
+        case 0x51: { int i = arg / s->esz; Datum v = pop(); if (i < fr.nargs) { d_unref(fr.args[i]); fr.args[i] = v; } else d_unref(v); break; }
+        case 0x52: { int i = arg / s->esz; Datum v = pop(); if (i < h->nlocals) { d_unref(fr.locals[i]); fr.locals[i] = v; } else d_unref(v); break; }
         case 0x53: pc = pos + arg; break;
         case 0x54: pc = pos - arg; break;
         case 0x55: a = pop(); if (!d_truthy(a)) pc = pos + arg; d_unref(a); break;
@@ -1054,7 +1056,7 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             if (arg == 0 && id > 11) nt = 1;
             else if (arg == 1 || arg == 4 || arg == 6) nt = 1;
             else if (arg == 8 && id == 2) nt = 1;
-            else if (arg == 9 || arg == 10 || arg == 11) nt = 2;   /* 11 = the ... of field x (castLib) */
+            else if (arg == 9 || arg == 10 || arg == 11) nt = s->esz == 6 ? 1 : 2;   /* 11 = the ... of field x (castLib); D4 zonder castLib */
             for (int i = nt - 1; i >= 0; i--) tg[i] = pop();
             push(player_get(arg, id, tg, nt));
             for (int i = 0; i < nt; i++) d_unref(tg[i]);
@@ -1067,7 +1069,7 @@ Datum vm_call(Script *s, Handler *h, Datum *args, int n) {
             Datum tg[2] = {VOIDD, VOIDD};
             int nt = 0;
             if (arg == 4 || arg == 6) nt = 1;
-            else if (arg == 9 || arg == 10 || arg == 11) nt = 2;
+            else if (arg == 9 || arg == 10 || arg == 11) nt = s->esz == 6 ? 1 : 2;
             for (int i = nt - 1; i >= 0; i--) tg[i] = pop();
             player_set(arg, id, tg, nt, v);
             for (int i = 0; i < nt; i++) d_unref(tg[i]);

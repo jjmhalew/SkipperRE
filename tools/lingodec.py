@@ -75,11 +75,11 @@ class Dec:
 
     # --- namen ---------------------------------------------------------
     def local(self, a):
-        i = a // 8
+        i = a // self.s.esz
         return self.h.locals[i] if i < len(self.h.locals) else f'local{i}'
 
     def param(self, a):
-        i = a // 8
+        i = a // self.s.esz
         return self.h.args[i] if i < len(self.h.args) else f'arg{i}'
 
     def var(self, st, vt):
@@ -284,7 +284,7 @@ class Dec:
             import struct
             push(E(repr(struct.unpack('>f', struct.pack('>i', a))[0])))
         elif op == 'pushcons':
-            v = s.literals[a // 8] if a // 8 < len(s.literals) else f'lit{a}'
+            v = s.literals[a // s.esz] if a // s.esz < len(s.literals) else f'lit{a}'
             push(E(lit(v), val=v))
         elif op == 'pushsymb':
             push(E('#' + name(), val=name()))

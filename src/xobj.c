@@ -176,7 +176,12 @@ Datum xobj_call(XObj *x, Datum *a, int n) {
         if (!_stricmp(m, "mWindowHandle")) return d_int(1);
         if (!_stricmp(m, "mCall") && x->st) {
             GlueSt *g = x->st;
-            if (!_stricmp(g->fn, "CDPlayTrack")) { cd_play_track(d_toint(ARG(1))); return d_int(1); }
+            if (!_stricmp(g->fn, "CDPlayTrack")) {   /* zonder cd-image (alleen de datatrack): mislukt, het script stopt dan */
+                if (!cd_tracks()) return d_int(0);
+                cd_play_track(d_toint(ARG(1)));
+                return d_int(1);
+            }
+            if (!_stricmp(g->fn, "CheckCD")) return d_int(1);   /* D4: staat de cd in het station? De spelbestanden zijn er */
             if (!_stricmp(g->fn, "CDPlaying")) return d_int(cd_playing());
             if (!_stricmp(g->fn, "CDStop")) { cd_stop(); return d_int(1); }
             if (!_stricmp(g->fn, "LoadSaveGame")) return d_int(ld_save_game(d_toint(ARG(2))));
