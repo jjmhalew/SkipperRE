@@ -28,8 +28,9 @@ Linux*)
   { cat res/skipperre.rc; echo '1 ICON "skipper.ico"'; } > out/skipper.rc
   RC=out/skipper.rc
   [ "$GUI" = 1 ] && DEFS="$DEFS -Wl,--subsystem,windows"   # geen consolevenster naast het spel
+  # -mcpu=baseline: Zig bouwt anders voor de processor van deze pc (AVX2 e.d.), dan crasht de exe op oudere processors
   # shellcheck disable=SC2086
-  python -m ziglang cc -std=c99 $OPT -g -fno-omit-frame-pointer -Wall -Wno-unused-function -o "$OUT" $SRC $RC $DEFS \
+  python -m ziglang cc -std=c99 -target x86_64-windows-gnu -mcpu=baseline $OPT -g -fno-omit-frame-pointer -Wall -Wno-unused-function -o "$OUT" $SRC $RC $DEFS \
     -lgdi32 -luser32 -lwinmm -ldbghelp -lcomdlg32 -lsetupapi -lhid
   ;;
 esac
