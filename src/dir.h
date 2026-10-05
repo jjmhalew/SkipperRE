@@ -341,7 +341,8 @@ typedef struct Player {
     Datum mouse_down_script, mouse_up_script, key_down_script, key_up_script;
     uint8_t pal[256][3];      /* huidig palet */
     uint8_t pal_target[256][3];
-    int pal_fade_steps, pal_fade_left;
+    int pal_fade_left;        /* 1 zolang een paletovergang loopt */
+    uint32_t pal_fade_t0, pal_fade_ms;
     uint8_t pal_from[256][3];
     int pal_lib, pal_num;
     int halted;

@@ -113,11 +113,23 @@ static int palette_lookup(Movie *mv, int lib, int num, uint8_t out[256][3]) {
     return 1;
 }
 
-static void palette_set(const uint8_t pal[256][3], int fade_frames) {
-    if (fade_frames > 0) {
+/* Duur van een paletovergang in ticks per snelheid 1..30 (D5, gemeten door ScummVM: palette-fade.h) */
+static const short k_fade_ticks[30] = {
+    494, 478, 460, 444, 426, 409, 392, 375, 358, 340, 323, 306, 289, 272, 254,
+    238, 220, 203, 186, 168, 152, 134, 117, 100, 83, 66, 48, 32, 14, 1};
+
+static int fade_ms(int speed) {
+    int t = k_fade_ticks[(speed < 1 ? 1 : speed > 30 ? 30 : speed) - 1];
+    return t <= 1 ? 0 : t * 1000 / 60;
+}
+
+static void palette_set(const uint8_t pal[256][3], int ms) {
+    if (ms > 0) {
         memcpy(P.pal_from, P.pal, 768);
         memcpy(P.pal_target, pal, 768);
-        P.pal_fade_steps = P.pal_fade_left = fade_frames;
+        P.pal_fade_left = 1;
+        P.pal_fade_t0 = now_ms();
+        P.pal_fade_ms = (uint32_t)ms;
     } else {
         memcpy(P.pal, pal, 768);
         P.pal_fade_left = 0;
@@ -125,14 +137,22 @@ static void palette_set(const uint8_t pal[256][3], int fade_frames) {
     P.update_needed = 1;
 }
 
+/* in echte tijd: Director wacht op de overgang (een frame duurt minstens tot hij klaar is, zie player_tick) */
 void palette_step(void) {
     if (P.pal_fade_left <= 0) return;
-    P.pal_fade_left--;
-    double t = 1.0 - (double)P.pal_fade_left / P.pal_fade_steps;
+    uint32_t el = now_ms() - P.pal_fade_t0;
+    double t = el >= P.pal_fade_ms ? 1.0 : (double)el / P.pal_fade_ms;
     for (int i = 0; i < 256; i++)
         for (int k = 0; k < 3; k++)
             P.pal[i][k] = (uint8_t)(P.pal_from[i][k] + (P.pal_target[i][k] - P.pal_from[i][k]) * t);
+    if (t >= 1.0) P.pal_fade_left = 0;
     P.update_needed = 1;
+}
+
+static int fade_remaining(void) {
+    if (P.pal_fade_left <= 0) return 0;
+    uint32_t el = now_ms() - P.pal_fade_t0;
+    return el >= P.pal_fade_ms ? 0 : (int)(P.pal_fade_ms - el);
 }
 
 /* ------------------------------------------------------------------ sprites */
@@ -393,10 +413,14 @@ static void enter_frame(int first) {
     if (fr->tempo && fr->tempo <= 120) CP->tempo = fr->tempo;
     if (CP == &P) {
         /* paletkanaal */
-        if (!P.pal_lib && fr->pal && (fr->pal != P.pal_num || first)) {
+        /* zonder cel geldt het palet van de laatste cel ervoor in de score (ook na een sprong: Intro's klik naar
+           "IntroEnd" tijdens een wit flitsframe); de overgang met de snelheid van de cel zelf */
+        const Frame *pf = fr;
+        for (int f = CP->frame - 1; !pf->pal && f >= 1; f--) pf = &mv->score.f[f - 1];
+        if (!P.pal_lib && pf->pal && (pf->pal != P.pal_num || first)) {
             uint8_t pal[256][3];
-            if (palette_lookup(mv, fr->pal_lib, fr->pal, pal)) palette_set(pal, 0);
-            P.pal_num = fr->pal;
+            if (palette_lookup(mv, pf->pal_lib, pf->pal, pal)) palette_set(pal, pf == fr ? fade_ms(fr->pal_speed) : 0);
+            P.pal_num = pf->pal;
         }
         /* geluidskanalen */
         int snd[3] = {0, fr->snd1, fr->snd2};
@@ -523,13 +547,14 @@ int player_tick(void) {
             ctx_tick();
             CP = &P;
         }
-    int tempo = P.tempo > 0 ? P.tempo : 15;
-    return 1000 / tempo;
+    int tempo = P.tempo > 0 ? P.tempo : 15, fr = fade_remaining();
+    return 1000 / tempo > fr ? 1000 / tempo : fr;
 }
 
 void player_idle(void) {
     if (P.halted || !P.mv) return;
     CP = &P;
+    palette_step();
     frame_event(sym("idle"));
     vm_abort = 0;
     /* ook de films in de dialoogvensters krijgen idle (mmtutor verbergt zo de volumemeter weer) */
@@ -1366,10 +1391,9 @@ static Datum bi_puppetPalette(Datum *a, int n) {
     CastLib *cl;
     Member *mm = member_of(m, &cl);
     if (mm && member_palette(cl, mm)) {
+        /* snelheid 1..60 (60 = meteen, zo gebruikt het spel hem overal); de helft van de schaal van het paletkanaal */
         int speed = d_toint(ARG(1));
-        /* snelheid 1..60: hoger = sneller; ruwweg (61-speed)/4+1 frames */
-        int frames = n >= 2 && speed > 0 ? (61 - speed) / 4 + 2 : 0;
-        palette_set(mm->pal, frames);
+        palette_set(mm->pal, n >= 2 && speed > 0 ? fade_ms((speed + 1) / 2) : 0);
         P.pal_lib = m.u.i >> 16;
         P.pal_num = m.u.i & 0xffff;
     }
