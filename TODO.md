@@ -161,7 +161,7 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
       extracted once (`src/disc.c`); `start.dxr` is pulled from the Wise installer. *(MDF/MDS not supported;
       `tools/iso.py` still has a hard-coded path)*
 - [x] Release build (`RELEASE=1 ./build.sh`: -O2, no UBSan, GUI subsystem = no console window), window icon from
-      `Magnus.ico` on the disc (or `res/skipperre.ico`), version info from `res/skipperre.rc` (0.9.7).
+      `Magnus.ico` on the disc (or `res/skipperre.ico`), version info from `res/skipperre.rc` (0.9.8).
 - [x] Commit the regression sweep *(`tools/regress.sh [exe]`, 16 checks, 2-3 s with the virtual clock; same pictures
       on Windows and Linux)* (13 hotspots + walk/drag/mailbox/boss/bucket scenarios).
 - [x] **Single exe** (`make_standalone.bat` → `tools/pack.c` → `SkipperRE-standalone.exe`, ~165 MB): game files
@@ -174,10 +174,13 @@ Headless it only goes as far as "opens and responds to clicks". Each item needs 
 - [x] **Android** APK (`android/`): first start with the system file picker, touch buttons in the side bars;
       tested in the emulator (intro, room, load screen, clock game). *(the picker flow itself only by its parts:
       BIN through a file descriptor tested on Linux; not on a real phone yet)*
+- [x] **Nintendo Switch** homebrew (`build_switch.sh` → `skipperre.nro`, `src/switch.c`): CD image on the SD card
+      unpacked at the first start, Joy-Cons as controller, touch in handheld mode. Verified in the Eden emulator
+      (unpack, restart, play). *(not on real hardware yet: speed and memory unknown)*
 - [x] **Controllers** (DualSense / DS4 / XInput on Windows, SDL elsewhere) as mouse + function keys; SDL path
       tested with a virtual controller. *(a real pad not tried yet)*
 - [x] **Texture packs** (`--dumptex`, `mods/textures`, HD 2-4x) and **intro skip** when a save exists.
-- [x] **CI** (`.github/workflows/build.yml`): Windows zip, Linux tar.gz, APK; release on a `v*` tag.
+- [x] **CI** (`.github/workflows/build.yml`): Windows zip, Linux tar.gz, APK, Switch zip; release on a `v*` tag.
 - [x] Optional: a "Liedjes" menu for the 15 CD-audio songs: `--songs` (`src/songs.c`): `Liedjes.bmp` with the
       hotspots, hover sounds and actions from `Liedjes.ini`, object n = audio track n+1 (Enhanced CD); the arrow starts
       the game, the red button quits. Verified headless (track 1 and 14, back arrow); not on Android (no command line).
