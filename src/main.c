@@ -378,10 +378,18 @@ static int skip_intro(void) {
 #ifdef __ANDROID__
 void android_init(void);
 #endif
+#ifdef __SWITCH__
+void switch_init(void);
+int switch_unpack(void);
+void switch_find_bin(char *bin, int n);
+#endif
 
 int main(int argc, char **argv) {
 #ifdef __ANDROID__
     android_init();   /* stderr naar skipper.log in de app-map */
+#elif defined __SWITCH__
+    switch_init();    /* stderr naar skipper.log in sdmc:/switch/skipperre */
+    if (switch_unpack()) return 0;   /* eerste start: cd-image uitgepakt, de volgende start speelt (switch.c) */
 #endif
     host_crash_init();
     const char *data = "extract", *movie = "start", *shot = NULL, *lang = NULL;
@@ -483,8 +491,12 @@ int main(int argc, char **argv) {
                                  "Put the CD in the drive, or start with:\n"
                                  "  skipper <folder with Magnus.dxr>\n"
                                  "  skipper --bin <path to the CD image: .CUE, .BIN, .ISO or .IMG>");
+#ifdef __SWITCH__
+            (void)msg;   /* switch_pick_data heeft al gezegd waar de bestanden heen moeten */
+#else
             if (g_headless) fprintf(stderr, "%s\n", msg);
             else host_message(msg, 1);
+#endif
             return 1;
         }
     }
@@ -515,6 +527,9 @@ int main(int argc, char **argv) {
     }
     if (binfound[0]) snprintf(bin, sizeof bin, "%s", binfound);
     if (!bin[0]) snprintf(bin, sizeof bin, "%s\\..\\SKIPPER_1.BIN", full);
+#ifdef __SWITCH__
+    switch_find_bin(bin, sizeof bin);   /* de muziek: de .bin naast skipperre.nro, ook onder een andere naam */
+#endif
     plat_full_path(bin, P.bin_path, sizeof P.bin_path);
     sound_headless = g_headless;
     sound_init();

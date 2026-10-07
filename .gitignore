@@ -9,3 +9,4 @@ dist/
 SkipperRE-standalone.exe
 tools/zig/
 releases/
+/skipperre.nro

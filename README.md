@@ -2,7 +2,7 @@
 
 A new player for *Skipper & Skeeto in Pretpark* (PC, Transposia 1997; the Dutch version of the Danish
 *Magnus og Myggen*), rebuilt by reverse engineering the original. It runs the original game files from **your own
-CD** on Windows 10/11, Linux (including the Steam Deck) and Android. No game files are included in this repository or
+CD** on Windows 10/11, Linux (including the Steam Deck), Android and the Nintendo Switch (homebrew). No game files are included in this repository or
 its releases.
 
 > Unofficial fan project, to preserve an old children's game. Not affiliated with or endorsed by Transposia, Ivanoff
@@ -26,7 +26,7 @@ The player's own messages (file picker, errors) are in English, or in Dutch on a
 > voor Windows de `windows.zip` van de [Releases](../../releases)-pagina, pak hem uit in een eigen map en start
 > `skipper.exe`. Hij vindt de cd in het station, of vraagt om een image van de cd (`SKIPPER_1.BIN`, `.cue` of `.iso`)
 > of een map met de bestanden van de cd, en kopieert de spelbestanden eenmalig. Daarna is de cd niet meer nodig. Voor
-> Linux is er een `tar.gz`, voor Android een `.apk`. De meldingen van de speler zelf zijn Nederlands op een Nederlands
+> Linux is er een `tar.gz`, voor Android een `.apk`, voor een Switch met homebrew een `switch.zip`. De meldingen van de speler zelf zijn Nederlands op een Nederlands
 > systeem. De rest van deze pagina is Engels.
 
 ## Playing
@@ -55,6 +55,18 @@ or a folder with a copy of the CD in Android's file picker; the files are copied
 (`Android/data/io.github.jjmhalew.skipperre/files/data`). Saved games and `skipper.log` are in
 `Android/data/io.github.jjmhalew.skipperre/files`.
 
+**Nintendo Switch** (experimental; needs a Switch that runs homebrew, i.e. custom firmware such as Atmosphère): unpack
+the `switch.zip` from the Releases page onto the SD card, which gives `/switch/skipperre/skipperre.nro` (or build it
+with `./build_switch.sh`). Put the CD image in the same folder: `SKIPPER_1.CUE` with `SKIPPER_1.BIN`, an `.iso`, or
+the CloneCD `.ccd` with its `.img`. The first start unpacks it into `/switch/skipperre/data` (a few minutes, once),
+then asks you to press + and start SkipperRE again. Keep the `.cue` and `.bin` there afterwards: the music of the CD is
+read from them. Or copy all files of the CD into `/switch/skipperre/data` yourself. Start it from the Homebrew Menu,
+preferably by holding R while starting a game (title takeover; the Album applet has less memory). Saved games and
+`skipper.log` are in `/switch/skipperre`. The Joy-Cons (attached or held as a pair) and the Pro Controller work as in
+the table below with the buttons by their labels: A clicks, B and + close a dialog or quit, X / Y load and save,
+− is help, L / R subtitles and music, ZL / ZR the volume. In handheld mode you can also tap the screen; the touch
+buttons then appear next to the picture until you use the Joy-Cons again.
+
 A click, tap or key press during the logo goes straight on to the intro (the original waited for the logo's tune to
 end). If you already have a saved game, the logo still plays but the intro is skipped: you go straight to the screen
 for picking a saved game. `--intro` plays the intro anyway, `--nointro` skips both the logo and the intro.
@@ -65,7 +77,7 @@ from other Transposia games, the CD's audio tracks). The songs play from a CD im
 button quits.
 
 ### Controls
-| | Mouse / keyboard | Controller (DualSense, DualShock 4, Xbox, ...) | Touch (Android) |
+| | Mouse / keyboard | Controller (DualSense, DualShock 4, Xbox, Switch, ...) | Touch (Android, Switch) |
 |---|---|---|---|
 | Point | mouse | left or right stick (d-pad: slow and precise) | |
 | Click, drag | left button | A / Cross (or the touchpad click); hold = drag | tap, drag |
@@ -79,8 +91,8 @@ button quits.
 | Fullscreen | Alt+Enter, F11 (Linux) | | |
 
 Controllers work over USB and Bluetooth without extra software (on Windows: DualSense and DualShock 4 directly, the
-rest through XInput; on Linux and Android through SDL). The pointer follows the stick; on Android the game draws it
-itself. On a phone the buttons sit in the black bars next to the picture, on a 4:3 tablet behind the *Menu* button.
+rest through XInput; on Linux, Android and the Switch through SDL). The pointer follows the stick; on Android and the
+Switch the game draws it itself. On a phone the buttons sit in the black bars next to the picture, on a 4:3 tablet behind the *Menu* button.
 They are labelled in the game's text language (on the Dutch CD *Laden*, *Opslaan*, *Uitleg*, ...; the table gives
 their meaning).
 
@@ -91,8 +103,8 @@ Every image in the game can be replaced by a PNG of any size, for example an HD 
 (anything before it may change) and put it in `mods\textures\` (subfolders allowed) in the save folder or next to
 the program. If an image is larger (2x, 3x, 4x), the player draws the whole picture at that resolution (`--hd N`
 picks one yourself). Transparency comes from the original image, so a pack only has to supply colours; pixels with
-alpha < 128 are transparent too. Save folder: `%APPDATA%\SkipperRE`, `~/.local/share/SkipperRE`, or on Android
-`Android/data/io.github.jjmhalew.skipperre/files`.
+alpha < 128 are transparent too. Save folder: `%APPDATA%\SkipperRE`, `~/.local/share/SkipperRE`, on Android
+`Android/data/io.github.jjmhalew.skipperre/files`, on the Switch `/switch/skipperre`.
 
 ## Building
 - **Windows** (10 or 11, nothing to install first): double-click `build.bat` → `out\skipper.exe`. The C compiler is
@@ -110,8 +122,12 @@ alpha < 128 are transparent too. Save folder: `%APPDATA%\SkipperRE`, `~/.local/s
   Needs the Android SDK with NDK 27.2 and CMake 3.22 (Android Studio can open the `android` folder too). The build
   fetches SDL 2.32.10 and checks its SHA-256. Without your own key (`-PskipperKeystore=... -PskipperKeyAlias=...
   -PskipperKeyPassword=...`) the release APK gets the debug key; fine for installing yourself.
-- **CI**: `.github/workflows/build.yml` builds all three on every push; a tag `v1.2.3` (equal to the version in
-  `res/skipperre.rc`) makes a GitHub release with the zip, the tar.gz and the APK. For a fixed Android key: the
+- **Nintendo Switch**: `./build_switch.sh` → `skipperre.nro`, with devkitPro's devkitA64, libnx and switch-sdl2.
+  Without `$DEVKITPRO` set it builds in the official `devkitpro/devkita64` Docker image instead. The same SDL code as on
+  Linux and Android; the Switch parts are in `src/switch.c` (first start, messages) and a few `__SWITCH__` lines in
+  `src/host_sdl.c` and `src/plat_posix.c`.
+- **CI**: `.github/workflows/build.yml` builds all four on every push; a tag `v1.2.3` (equal to the version in
+  `res/skipperre.rc`) makes a GitHub release with the zip, the tar.gz, the APK and the Switch zip. For a fixed Android key: the
   secrets `ANDROID_KEYSTORE_B64`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`.
 
 ## License
@@ -120,7 +136,7 @@ original game, the game files or the trademarks; those belong to their owners an
 `src/stb/` contains stb_image, stb_image_write and stb_truetype by Sean Barrett (public domain or MIT, see the end of
 each file); `res/fonts/` the Liberation fonts (SIL Open Font License, `res/fonts/LICENSE`);
 `android/app/src/main/java/org/libsdl/` is SDL's Android code (SDL 2.32.10, zlib license). `src/pad.c` and the
-Android setup come from [WoodyRE](https://github.com/jjmhalew/WoodyRE).
+Android and Switch setup come from [WoodyRE](https://github.com/jjmhalew/WoodyRE).
 
 # Development and reverse engineering
 The game was made with **Macromedia Director 5** (file version 1217). So there is no game code in an exe: all logic
@@ -165,7 +181,9 @@ it out once (`src/disc.c`: its own inflate and ISO9660 reader). For the Python t
 | `src/host_win.c`, `src/host_sdl.c` | window, input, cursors, messages, file picker, printing: Win32 / SDL2 |
 | `src/plat_win.c`, `src/plat_posix.c` | files, folders, time, mutex (`src/plat.h`); outside Windows case-insensitive paths |
 | `src/pad.c`, `src/pad_sdl.c`, `src/padinput.c` | controllers (raw HID / XInput on Windows, SDL elsewhere) as mouse and hotkeys |
-| `src/android.c` | Android: first start (file picker), messages, touch buttons |
+| `src/android.c` | Android: first start (file picker), messages |
+| `src/switch.c` | Nintendo Switch: first start (unpacking the CD image from the SD card), messages, slot picker |
+| `src/touch.c` | touch screen (Android, Switch handheld): the first finger is the mouse, buttons in the black bars |
 | `src/dbgheap.c` | debug heap (`DEFS=-DDBGHEAP`): canaries + quarantine, reports file:line |
 
 Semantics the game turned out to need (and the port had to copy):

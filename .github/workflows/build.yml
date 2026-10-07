@@ -1,7 +1,9 @@
-# Builds skipper.exe (Windows, build.bat with Zig), skipper (Linux, SDL2) and the Android APK on every push and pull request. No game data
-# is involved: the programs hold only the port's own code; each job runs the transition test (--transtest), which needs
-# no game files. A pushed tag v* also publishes a GitHub release with SkipperRE-<tag>-windows.zip (skipper.exe, README.md,
-# LICENSE), SkipperRE-<tag>-linux-x86_64.tar.gz (skipper, README.md, LICENSE) and SkipperRE-<tag>.apk.
+# Builds skipper.exe (Windows, build.bat with Zig), skipper (Linux, SDL2), the Android APK and skipperre.nro (Switch
+# homebrew, build_switch.sh) on every push and pull request. No game data is involved: the programs hold only the port's
+# own code; the Windows and Linux jobs run the transition test (--transtest), which needs no game files. A pushed tag v*
+# also publishes a GitHub release with SkipperRE-<tag>-windows.zip (skipper.exe, README.md, LICENSE),
+# SkipperRE-<tag>-linux-x86_64.tar.gz (skipper, README.md, LICENSE), SkipperRE-<tag>.apk and SkipperRE-<tag>-switch.zip
+# (switch/skipperre/ with skipperre.nro, README.md, LICENSE: unpacked onto the SD card as is).
 name: build
 
 on:
@@ -117,10 +119,32 @@ jobs:
           name: SkipperRE-android
           path: ${{ env.APK }}
 
+  # Nintendo Switch homebrew (.nro) in devkitPro's own image, which holds devkitA64, libnx and switch-sdl2.
+  switch:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build
+        run: sh build_switch.sh skipperre && ls -l skipperre.nro
+
+      - name: Package
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then name="SkipperRE-$GITHUB_REF_NAME"; else name=$(printf 'SkipperRE-%.7s' "$GITHUB_SHA"); fi
+          mkdir -p pkg/switch/skipperre && cp skipperre.nro README.md LICENSE pkg/switch/skipperre/
+          (cd pkg && zip -qr "../$name-switch.zip" .)
+          echo "SWZIP=$name-switch.zip" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: SkipperRE-switch
+          path: ${{ env.SWZIP }}
+
   # The release notes: the annotated tag's message (what is new; its first line is the title of the tag), then how to start.
   release:
     if: github.ref_type == 'tag'
-    needs: [windows, linux, android]
+    needs: [windows, linux, android, switch]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -138,6 +162,6 @@ jobs:
         run: |
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           new=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | sed -e 's/[[:space:]]*$//')
-          start="Windows: unzip and start skipper.exe; it finds the Skipper & Skeeto CD in the drive, or asks for an image of it (SKIPPER_1.BIN / .CUE / .ISO) or a folder with its files. Linux / Steam Deck: unpack the .tar.gz and start skipper (needs SDL2). Android: install the .apk and choose the CD image (BIN or ISO) or a copy of the CD at the first start. The game files are not included - you need your own CD; see README.md."
+          start="Windows: unzip and start skipper.exe; it finds the Skipper & Skeeto CD in the drive, or asks for an image of it (SKIPPER_1.BIN / .CUE / .ISO) or a folder with its files. Linux / Steam Deck: unpack the .tar.gz and start skipper (needs SDL2). Android: install the .apk and choose the CD image (BIN or ISO) or a copy of the CD at the first start. Switch (homebrew, experimental): unpack the -switch.zip onto the SD card and put the CD image (SKIPPER_1.CUE and .BIN, or an .iso) into /switch/skipperre/. The game files are not included - you need your own CD; see README.md."
           if [ -n "$new" ]; then printf '%s\n\n%s\n' "$new" "$start" > notes.md; else printf '%s\n' "$start" > notes.md; fi
           gh release create "$GITHUB_REF_NAME" dist/* --title "SkipperRE $GITHUB_REF_NAME" --notes-file notes.md

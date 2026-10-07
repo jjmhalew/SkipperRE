@@ -17,7 +17,7 @@ set(S ${CMAKE_CURRENT_SOURCE_DIR}/../../src)
 add_library(main SHARED
     ${S}/main.c ${S}/host_sdl.c ${S}/plat_posix.c ${S}/ini.c ${S}/text_ttf.c ${S}/stb_impl.c ${S}/dfile.c ${S}/lingo.c
     ${S}/builtins.c ${S}/player.c ${S}/stage.c ${S}/xobj.c ${S}/sound.c ${S}/video.c ${S}/trans.c ${S}/disc.c ${S}/pack.c
-    ${S}/dbgheap.c ${S}/pad_sdl.c ${S}/padinput.c ${S}/texpack.c ${S}/songs.c ${S}/android.c)
+    ${S}/dbgheap.c ${S}/pad_sdl.c ${S}/padinput.c ${S}/texpack.c ${S}/songs.c ${S}/android.c ${S}/touch.c)
 target_include_directories(main PRIVATE ${S})
 # char is unsigned on ARM; the engine is written for x86, where it is signed
 target_compile_options(main PRIVATE -std=gnu99 -O2 -fsigned-char -Wno-format-truncation -D_FILE_OFFSET_BITS=64)

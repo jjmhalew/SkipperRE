@@ -300,6 +300,9 @@ static int skip_dir(const char *name) {
     return !_stricmp(name, "Catalog") || !_stricmp(name, "VFW");
 }
 
+void (*disc_progress)(const char *name, uint64_t bytes);   /* na elk uitgepakt bestand (Switch: voortgang op de console) */
+static uint64_t g_unpacked;
+
 static int iso_walk(Img *im, uint32_t lba, uint32_t size, const char *dst, int depth) {
     if (depth > 8) return 1;
     plat_mkdir(dst);
@@ -332,10 +335,12 @@ static int iso_walk(Img *im, uint32_t lba, uint32_t size, const char *dst, int d
             for (uint32_t left = esz, i = 0; left > 0; i++) {
                 if (!img_sector(im, elba + i, sec)) { ok = 0; break; }
                 uint32_t n = left < 2048 ? left : 2048;
-                fwrite(sec, 1, n, o);
+                if (fwrite(sec, 1, n, o) != n) { ok = 0; break; }   /* schijf / SD-kaart vol */
                 left -= n;
             }
-            fclose(o);
+            if (fclose(o)) ok = 0;
+            g_unpacked += esz;
+            if (disc_progress) disc_progress(name, g_unpacked);
         }
     }
     free(dir);

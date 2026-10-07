@@ -15,6 +15,7 @@ static uint32_t g_last, g_prev, g_used_ms;
 static int g_click;
 
 int pad_recent(void) { return g_used_ms && plat_ms() - g_used_ms < 4000; }
+uint32_t pad_used_ms(void) { return g_used_ms; }
 
 static float curve(float v) {   /* dode zone 0,18, daarna kwadratisch */
     float m = fabsf(v);

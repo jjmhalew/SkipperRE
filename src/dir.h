@@ -412,6 +412,7 @@ int disc_d4(const char *dir);
 int disc_make_main_d4(const char *dir, const char *dst);
 int disc_extract(const char *image, const char *dst, char *bin_out, int nbin);
 int disc_use(const char *pick, const char *appdir, char *out, int n, char *bin_out, int nbin);   /* gekozen image of map */
+extern void (*disc_progress)(const char *name, uint64_t bytes);   /* disc_extract: na elk bestand, bytes tot nu toe */
 int disc_inflate(const uint8_t *src, size_t n, size_t usize, uint8_t **out, size_t *outlen);
 /* pack.c: spelbestanden achter de exe (tools/pack.c) */
 int pack_open(const char *root);
@@ -493,3 +494,4 @@ int ld_save_game(int is_load);        /* slotkeuze; 0 = annuleren */
 /* padinput.c: controller als muis en sneltoetsen */
 int pad_input(int focused, unsigned devchanges);   /* 1 = aanwijzer verplaatst */
 int pad_recent(void);                             /* de pad is de laatste 4 s gebruikt */
+uint32_t pad_used_ms(void);                       /* plat_ms() van het laatste padgebruik, 0 = nog nooit */

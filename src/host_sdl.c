@@ -1,4 +1,4 @@
-/* host_sdl.c - het venster buiten Windows (Linux, Android) met SDL2: tonen via een SDL-renderer (logische grootte
+/* host_sdl.c - het venster buiten Windows (Linux, Android, Switch) met SDL2: tonen via een SDL-renderer (logische grootte
  * 640x480, zwarte randen, scherpe pixels), muis / aanraken / toetsen, de cursors van het spel, meldingen, de
  * bestandskiezer voor de spelbestanden en afdrukken als PNG. Op Windows: host_win.c. */
 #ifndef _WIN32
@@ -21,8 +21,17 @@ static SDL_Texture *g_tex;
 #ifdef __ANDROID__
 int android_dialog(const char *text, const char *b1, const char *b2, const char *b3);   /* android.c */
 int android_pick_data(char *out, int n);
-void touch_draw(SDL_Renderer *r);
+#endif
+#ifdef __SWITCH__
+void switch_message(const char *text);                                                  /* switch.c */
+int switch_pick_data(char *out, int n);
+int switch_slot(int is_load, const char names[][64], int slots);
+#endif
+#if defined __ANDROID__ || defined __SWITCH__   /* een aanraakscherm en geen muisaanwijzer */
+#define HANDHELD 1
+void touch_draw(SDL_Renderer *r);                                                       /* touch.c */
 int touch_event(SDL_Event *e, SDL_Window *win, SDL_Renderer *r);
+int touch_active(void);
 #endif
 
 /* taal van het systeem ("da", "sv", ...): SDL leest LANG / LC_ALL, op Android de taal van het toestel */
@@ -38,6 +47,10 @@ void host_message(const char *text, int warn) {
 #ifdef __ANDROID__
     (void)warn;
     if (!g_headless) android_dialog(text, "OK", NULL, NULL);
+    return;
+#elif defined __SWITCH__
+    (void)warn;
+    if (!g_headless) switch_message(text);
     return;
 #endif
     if (!g_headless)
@@ -63,11 +76,17 @@ int ld_save_game(int is_load) {
         b[nb++] = (SDL_MessageBoxButtonData){0, i, labels[i - 1]};
     }
     if (!nb) return 0;   /* laden zonder opgeslagen spel (de D4-cd vraagt het bij elke start): meteen een nieuw spel */
+#ifdef __SWITCH__   /* het cijfertoetsenbord van het systeem (switch.c) */
+    (void)b;
+    int slot = switch_slot(is_load, (const char (*)[64])names, SLOTS);
+    if (slot <= 0) return 0;
+#else
     b[nb++] = (SDL_MessageBoxButtonData){SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, UI("Annuleren", "Cancel")};
     SDL_MessageBoxData d = {SDL_MESSAGEBOX_INFORMATION, g_win, is_load ? UI("Spel laden", "Load game") : UI("Spel opslaan", "Save game"),
                             is_load ? UI("Welk spel?", "Which game?") : UI("Op welke plaats?", "In which slot?"), nb, b, NULL};
     int slot = 0;
     if (SDL_ShowMessageBox(&d, &slot) || slot <= 0) return 0;
+#endif
     if (!is_load) {
         char key[16], name[64];
         snprintf(key, sizeof key, "GAME%d", slot);
@@ -97,6 +116,7 @@ void host_print(const uint32_t *px, int w, int h, int landscape, const char *nam
 
 /* ------------------------------------------------------------------ bestandskiezer */
 
+#if !defined __ANDROID__ && !defined __SWITCH__
 static int ask(const char *text, const char *yes, const char *no) {
     const SDL_MessageBoxButtonData b[2] = {{SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, yes}, {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, no}};
     SDL_MessageBoxData d = {SDL_MESSAGEBOX_INFORMATION, g_win, "Skipper & Skeeto", text, 2, b, NULL};
@@ -104,11 +124,14 @@ static int ask(const char *text, const char *yes, const char *no) {
     if (SDL_ShowMessageBox(&d, &r)) return 0;
     return r;
 }
+#endif
 
 int host_pick_data(char *out, int n) {
     if (g_headless) return 0;
 #ifdef __ANDROID__
     return android_pick_data(out, n);
+#elif defined __SWITCH__
+    return switch_pick_data(out, n);
 #else
     if (!ask(UI("De spelbestanden van Skipper & Skeeto zijn niet gevonden.\n\n"
                 "Kies hierna een image van de cd (.cue, .bin, .iso of .img), of Magnus.dxr op de gemounte cd of in een "
@@ -174,8 +197,8 @@ void host_sdl_to_stage(float wx, float wy, int *x, int *y) {
     *y = (int)floorf((py - g_dst.y) * 480.0f / g_dst.h);
 }
 
-#ifdef __ANDROID__
-/* Android heeft geen muisaanwijzer: met een controller tekenen we de cursor van het spel zelf (of een pijl) */
+#ifdef HANDHELD
+/* Android en de Switch hebben geen muisaanwijzer: met een controller tekenen we de cursor van het spel zelf (of een pijl) */
 static void draw_soft_cursor(void) {
     static SDL_Texture *tex;
     static int key = -1, tw, th, thx, thy;
@@ -226,6 +249,10 @@ void host_blit(const uint32_t *px, int w, int h) {
     SDL_RenderCopy(g_ren, g_tex, NULL, &g_dst);
 #ifdef __ANDROID__
     if (pad_recent()) draw_soft_cursor();
+#elif defined __SWITCH__
+    if (!touch_active()) draw_soft_cursor();   /* de Joy-Cons zijn er altijd: de aanwijzer, tenzij er net is aangeraakt */
+#endif
+#ifdef HANDHELD
     touch_draw(g_ren);
 #endif
     SDL_RenderPresent(g_ren);
@@ -332,8 +359,8 @@ static unsigned g_devchanges;   /* een controller kwam of ging */
 void host_events(void) {
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
-#ifdef __ANDROID__
-        if (touch_event(&e, g_win, g_ren)) continue;   /* vingers: muis en knoppen (android.c) */
+#ifdef HANDHELD
+        if (touch_event(&e, g_win, g_ren)) continue;   /* vingers: muis en knoppen (touch.c) */
 #endif
         switch (e.type) {
         case SDL_QUIT: P.halted = 2; break;
@@ -383,7 +410,7 @@ void host_events(void) {
         }
     }
     if (g_win && pad_input((SDL_GetWindowFlags(g_win) & SDL_WINDOW_INPUT_FOCUS) != 0, g_devchanges)) {
-#ifndef __ANDROID__   /* de pad verplaatste de aanwijzer: de echte muis erheen (Android tekent hem zelf, zie host_blit) */
+#ifndef HANDHELD   /* de pad verplaatste de aanwijzer: de echte muis erheen (Android en Switch tekenen hem zelf, zie host_blit) */
         int ww, wh, ow, oh;
         SDL_GetWindowSize(g_win, &ww, &wh);
         SDL_GetRendererOutputSize(g_ren, &ow, &oh);
@@ -392,7 +419,7 @@ void host_events(void) {
 #endif
     }
     if (g_win) update_cursor();
-#ifdef __ANDROID__
+#ifdef HANDHELD
     int want = player_text_wanted();   /* schermtoetsenbord zolang er een naamveld is */
     if (want != g_text_on) { if (want) SDL_StartTextInput(); else SDL_StopTextInput(); g_text_on = want; }
 #endif
@@ -412,11 +439,14 @@ int host_open(int scale, int fullscreen) {
             while (640 * (scale + 1) <= r.w - 16 && 480 * (scale + 1) <= r.h - 48) scale++;
     }
     Uint32 fl = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+    int ww = 640 * scale, wh = 480 * scale;
 #ifdef __ANDROID__
     fl |= SDL_WINDOW_FULLSCREEN;
+#elif defined __SWITCH__
+    fl |= SDL_WINDOW_FULLSCREEN;   /* het hele scherm; SDL volgt docked / handheld */
+    ww = 1280; wh = 720;
 #endif
-    g_win = SDL_CreateWindow(g_title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
-                             640 * scale, 480 * scale, fl);
+    g_win = SDL_CreateWindow(g_title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, ww, wh, fl);
     if (!g_win) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     SDL_SetWindowMinimumSize(g_win, 320, 240);
     g_ren = SDL_CreateRenderer(g_win, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
@@ -426,7 +456,7 @@ int host_open(int scale, int fullscreen) {
     if (fullscreen) toggle_fullscreen();
     g_cur_arrow = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_ARROW);
     g_cur_wait = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_WAIT);
-#ifndef __ANDROID__
+#ifndef HANDHELD
     SDL_StartTextInput();
     g_text_on = 1;
 #else

@@ -1,4 +1,4 @@
-/* plat_posix.c - plat.h op Linux en Android */
+/* plat_posix.c - plat.h op Linux, Android en de Switch (libnx: paden als sdmc:/switch/skipperre/..., alles in die map) */
 #ifndef _WIN32
 #include "plat.h"
 #undef fopen
@@ -12,6 +12,9 @@
 #include <unistd.h>
 #ifdef __ANDROID__
 #include <SDL.h>
+#endif
+#ifdef __SWITCH__
+#define SWITCH_HOME "sdmc:/switch/skipperre"   /* naast skipperre.nro */
 #endif
 
 static void slashes(const char *in, char *out, size_t n) {
@@ -28,6 +31,18 @@ static int resolve(const char *in, char *out, size_t cap) {
     out[0] = 0;
     char *p = buf;
     if (*p == '/') { out[o++] = '/'; out[o] = 0; while (*p == '/') p++; }
+#ifdef __SWITCH__
+    else {   /* "sdmc:/": het apparaat is de wortel */
+        char *c = strchr(p, ':');
+        if (c && c[1] == '/' && c - p < 16) {
+            o = (size_t)(c + 2 - p);
+            memcpy(out, p, o);
+            out[o] = 0;
+            p = c + 2;
+            while (*p == '/') p++;
+        }
+    }
+#endif
     while (*p) {
         char *e = strchr(p, '/');
         if (e) *e = 0;
@@ -108,6 +123,10 @@ void plat_mkdir(const char *path) {
 }
 
 void plat_exe_path(char *out, int n) {
+#ifdef __SWITCH__
+    snprintf(out, n, "%s/skipperre.nro", SWITCH_HOME);
+    return;
+#endif
     ssize_t k = readlink("/proc/self/exe", out, (size_t)n - 1);
     if (k <= 0) { snprintf(out, n, "skipper"); return; }
     out[k] = 0;
@@ -122,14 +141,16 @@ void plat_exe_dir(char *out, int n) {
 void plat_full_path(const char *in, char *out, int n) {
     char p[1024];
     slashes(in, p, sizeof p);
-    if (p[0] == '/') { snprintf(out, n, "%s", p); return; }
+    if (p[0] == '/' || (strchr(p, ':') && strchr(p, ':')[1] == '/')) { snprintf(out, n, "%s", p); return; }
     char cwd[700];
     if (!getcwd(cwd, sizeof cwd)) snprintf(cwd, sizeof cwd, ".");
     snprintf(out, n, "%s/%s", cwd, p);
 }
 
 void plat_user_dir(char *out, int n) {
-#ifdef __ANDROID__
+#ifdef __SWITCH__
+    snprintf(out, n, "%s", SWITCH_HOME);
+#elif defined __ANDROID__
     const char *ext = SDL_AndroidGetExternalStoragePath();
     snprintf(out, n, "%s", ext ? ext : SDL_AndroidGetInternalStoragePath());
 #else
@@ -142,7 +163,7 @@ void plat_user_dir(char *out, int n) {
 }
 
 void plat_temp_dir(char *out, int n) {
-#ifdef __ANDROID__
+#if defined __ANDROID__ || defined __SWITCH__
     plat_user_dir(out, n);
     snprintf(out + strlen(out), n - strlen(out), "/tmp");
     plat_mkdir(out);
@@ -171,6 +192,10 @@ int plat_find_ext(const char *dir, const char *ext, char *out, int n) {
 /* gemounte schijven: /media/<gebruiker>/<label>, /run/media/<gebruiker>/<label>, /media/<label>, /mnt/<x> */
 int plat_cd_dirs(char out[][PLAT_PATH], int max) {
     int k = 0;
+#ifdef __SWITCH__
+    (void)out; (void)max;
+    return 0;
+#endif
     const char *roots[] = {"/media", "/run/media", "/mnt"};
     for (int r = 0; r < 3; r++) {
         DIR *d = opendir(roots[r]);

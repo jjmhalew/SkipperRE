@@ -66,7 +66,10 @@ static void vpad_drive(double now) {
     for (int b = 0; b < SDL_CONTROLLER_BUTTON_MAX; b++) SDL_JoystickSetVirtualButton(j, b, (Uint8)(m >> b & 1));
 }
 
-const char *pad_kind_name(int kind) { return kind == PADK_DS5 ? "DualSense" : kind == PADK_DS4 ? "DualShock 4" : kind == PADK_XBOX ? "Xbox controller" : "none"; }
+const char *pad_kind_name(int kind) {
+    return kind == PADK_DS5 ? "DualSense" : kind == PADK_DS4 ? "DualShock 4" : kind == PADK_XBOX ? "Xbox controller" :
+           kind == PADK_SWITCH ? "Switch controller" : "none";
+}
 
 static void open_new(void) {
     for (int j = 0; j < SDL_NumJoysticks(); j++) {
@@ -78,10 +81,21 @@ static void open_new(void) {
         SDL_GameController *c = SDL_GameControllerOpen(j);
         if (!c) continue;
         int t = SDL_GameControllerGetType(c), kind = t == SDL_CONTROLLER_TYPE_PS5 ? PADK_DS5 : t == SDL_CONTROLLER_TYPE_PS4 ? PADK_DS4 : PADK_XBOX;
+        if (t == SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_PRO) kind = PADK_SWITCH;   /* SDL goes by the labels: A = the right button */
+#if SDL_VERSION_ATLEAST(2, 24, 0)
+        if (t == SDL_CONTROLLER_TYPE_NINTENDO_SWITCH_JOYCON_PAIR) kind = PADK_SWITCH;
+#endif
+#ifdef __SWITCH__
+        kind = PADK_SWITCH;   /* the Joy-Cons, handheld mode, a Pro Controller */
+#endif
         P.p[slot].c = c; P.p[slot].id = id; P.p[slot].kind = kind; P.p[slot].sent = -1;
         memset(&P.p[slot].st, 0, sizeof P.p[slot].st);
+#ifdef __SWITCH__
+        if (slot == 0) fprintf(stderr, "[pad] %s (SDL lists all 8 player slots, whether a controller is there or not)\n", pad_kind_name(kind));
+#else
         fprintf(stderr, "[pad] %s aangesloten (\"%s\")\n", pad_kind_name(kind), SDL_GameControllerName(c));
-        if (kind != PADK_XBOX) {   /* Skipper's red cap, the middle player light (as pad.c) */
+#endif
+        if (kind == PADK_DS4 || kind == PADK_DS5) {   /* Skipper's red cap, the middle player light (as pad.c) */
             SDL_GameControllerSetLED(c, 0xe0, 0x18, 0x10);
             SDL_GameControllerSetPlayerIndex(c, 0);
         }
