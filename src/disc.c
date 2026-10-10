@@ -288,9 +288,11 @@ int disc_make_start(const char *dir, const char *dst) {
 
 /* ------------------------------------------------------------------ ISO9660 uit BIN/CUE of ISO */
 typedef struct { FILE *f; long start; int raw, hdr; } Img;   /* raw: 2352-byte sectoren, hdr = 16/24 */
+long long disc_base;
+
 
 static int img_sector(Img *im, uint32_t lba, uint8_t *buf) {
-    long long pos = im->raw ? (long long)lba * 2352 + im->hdr : (long long)lba * 2048;
+    long long pos = disc_base + (im->raw ? (long long)lba * 2352 + im->hdr : (long long)lba * 2048);
     if (_fseeki64(im->f, pos, SEEK_SET)) return 0;
     return fread(buf, 1, 2048, im->f) == 2048;
 }
@@ -429,7 +431,7 @@ int disc_extract(const char *image, const char *dst, char *bin_out, int nbin) {
          * een ISO9660-volumebeschrijving staat */
         static const uint8_t sync[12] = {0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0};
         uint8_t h[16];
-        for (uint32_t lba = 0; !im.raw && !_fseeki64(im.f, (long long)lba * 2352, SEEK_SET) && fread(h, 1, 16, im.f) == 16; lba++) {
+        for (uint32_t lba = 0; !im.raw && !_fseeki64(im.f, disc_base + (long long)lba * 2352, SEEK_SET) && fread(h, 1, 16, im.f) == 16; lba++) {
             if (memcmp(h, sync, 12) || (h[15] != 1 && h[15] != 2)) continue;
             Img t = im;
             t.raw = 1;

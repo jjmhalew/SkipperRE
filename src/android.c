@@ -2,6 +2,8 @@
  *   - de eerste start: Androids bestandskiezer (SkipperActivity.java) voor een image van de cd (BIN of ISO, gelezen via
  *     de file descriptor die de kiezer geeft: /proc/self/fd/N) of een map met een kopie van de cd (naar de app-map
  *     gekopieerd); daarna staan de spelbestanden in Android/data/io.github.jjmhalew.skipperre/files/data
+ *   - een APK van make_android_bundle.bat (tools/apkbundle.c) heeft het image van de cd zelf bij zich (assets/game.img):
+ *     dat wordt bij de eerste start zonder vragen uitgepakt
  *   - meldingen in Androids eigen dialoog (SDL's berichtvenster laat in liggend formaat zijn knoppen onder het scherm)
  *   - stderr naar skipper.log in de app-map
  * Aanraken staat in touch.c (ook voor de Switch). */
@@ -10,6 +12,7 @@
 #undef fopen
 #include <SDL.h>
 #include <jni.h>
+#include <android/asset_manager_jni.h>
 #include <unistd.h>
 
 /* ------------------------------------------------------------------ Java */
@@ -73,10 +76,49 @@ static int java_pick(int kind, const char *dest) {
     return r;
 }
 
+/* het image in de APK (make_android_bundle.bat): assets/game.img, ongecomprimeerd, dus zijn bytes staan vanaf *base in het
+ * geinstalleerde APK-bestand. Geeft een file descriptor van dat bestand (de aanroeper sluit hem), -1 = een gewone APK */
+static int bundled_image(long long *base) {
+    JNIEnv *env;
+    jclass c = act_class(&env);
+    int fd = -1;
+    if (!c) return -1;
+    jobject act = (jobject)SDL_AndroidGetActivity();
+    jmethodID m = (*env)->GetMethodID(env, c, "getAssets", "()Landroid/content/res/AssetManager;");
+    jobject jam = m && act ? (*env)->CallObjectMethod(env, act, m) : NULL;
+    if ((*env)->ExceptionCheck(env)) { (*env)->ExceptionClear(env); jam = NULL; }
+    AAssetManager *am = jam ? AAssetManager_fromJava(env, jam) : NULL;
+    AAsset *a = am ? AAssetManager_open(am, "game.img", AASSET_MODE_RANDOM) : NULL;
+    if (a) {
+        off64_t start = 0, len = 0;
+        fd = AAsset_openFileDescriptor64(a, &start, &len);
+        *base = start;
+        AAsset_close(a);
+    }
+    if (jam) (*env)->DeleteLocalRef(env, jam);
+    if (act) (*env)->DeleteLocalRef(env, act);
+    (*env)->DeleteLocalRef(env, c);
+    return fd;
+}
+
 /* host_pick_data op Android: kiezen, en meteen uitpakken of kopiëren; out = de map met de spelbestanden */
 int android_pick_data(char *out, int n) {
     char user[PLAT_PATH];
     plat_user_dir(user, sizeof user);
+    long long base = 0;
+    int bfd = bundled_image(&base);
+    if (bfd >= 0) {
+        char img[64];
+        snprintf(img, sizeof img, "/proc/self/fd/%d", bfd);
+        progress(UI("Spelbestanden uitpakken...", "Unpacking the game files..."));
+        disc_base = base;
+        int ok = disc_use(img, user, out, n, NULL, 0);
+        disc_base = 0;
+        progress(NULL);
+        close(bfd);
+        if (ok) return 1;
+        fprintf(stderr, "[android] het image in de APK kon niet worden uitgepakt\n");
+    }
     for (;;) {
         int k = android_dialog(UI("Welkom bij Skipper & Skeeto in Pretpark!\n\n"
                                   "De spelbestanden komen van je eigen cd. Kies een image van de cd (SKIPPER_1.BIN, een .iso "

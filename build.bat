@@ -4,6 +4,7 @@ rem   build.bat                   out\skipper.exe, het spel (start hem, hij vraa
 rem   build.bat dev               out\dev.exe, de ontwikkelbuild (log in de console, UBSan, PDB)
 rem   build.bat standalone [map]  SkipperRE-standalone.exe: skipper.exe + JOUW spelbestanden in een exe, alleen voor
 rem                               jezelf. De spelbestanden komen uit [map], extract\, data\ of %APPDATA%\SkipperRE\data.
+rem   build.bat apkbundle         alleen out\apkbundle.exe, het programma van make_android_bundle.bat
 rem De C-compiler is Zig (ziglang.org): een zig op PATH of "pip install ziglang" wordt gebruikt als die er is, anders
 rem wordt de officiele Windows-versie eenmalig in tools\zig gedownload en tegen zijn SHA-256 gecontroleerd.
 rem De bronlijst staat ook in build.sh (Git Bash en Linux).
@@ -22,6 +23,11 @@ set "FLAGS=-std=c99 %CPU% -g -fno-omit-frame-pointer -Wall -Wno-unused-function"
 
 call :find_zig || goto :fail
 if not exist out mkdir out
+
+if /i "%~1"=="apkbundle" (
+    %ZIG% cc -std=c99 -O2 %CPU% -o out\apkbundle.exe tools\apkbundle.c -lbcrypt -lshell32 || goto :fail
+    exit /b 0
+)
 
 rem versie (res\skipperre.rc) en icoon: dat van de cd als de spelbestanden er zijn, anders res\skipperre.ico
 set "ICON=res\skipperre.ico"

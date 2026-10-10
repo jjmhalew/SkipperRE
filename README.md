@@ -117,6 +117,11 @@ alpha < 128 are transparent too. Save folder: `%APPDATA%\SkipperRE`, `~/.local/s
   `extract\`, `data\` or `%APPDATA%\SkipperRE\data` (an image unpacked earlier), or from the folder you give it, such
   as the CD drive: `make_standalone.bat D:\`. It contains the game itself, so it is for your own use only: never share
   or upload it.
+- **One APK for yourself**: `make_android_bundle.bat` puts the APK of a release (or of your own build) and **your** CD
+  image (`SKIPPER_1.BIN`, an `.iso` or a CloneCD `.img`) into a single `SkipperRE-bundle.apk`, which unpacks the image at
+  its first start without asking for it. Drag both files onto the .bat, or put them next to it. It is signed with a key
+  of your own (made once, in `%APPDATA%\SkipperRE\android-bundle.key`), so it does not install over a SkipperRE from the
+  Releases page: uninstall that first. Also for your own devices only.
 - **Linux**: `./build.sh` → `out/skipper` (Debian / Ubuntu: `sudo apt install build-essential libsdl2-dev`).
 - **Android**: `cd android` and `./gradlew assembleRelease` (or `assembleDebug`) → `android/app/build/outputs/apk/`.
   Needs the Android SDK with NDK 27.2 and CMake 3.22 (Android Studio can open the `android` folder too). The build
