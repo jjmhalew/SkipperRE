@@ -389,13 +389,27 @@ Builtin vm_builtin(int name) {
     return NULL;
 }
 
+/* Elke melding hoogstens 20 keer (met --trace altijd): een fout in een idle-handler komt buiten headless tot ~1000 keer
+ * per seconde en zou skipper.log (Android, Switch) of de console laten vollopen. */
 void vm_error(const char *fmt, ...) {
+    char buf[512];
     va_list ap;
     va_start(ap, fmt);
-    fprintf(stderr, "[lingo] ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+    vsnprintf(buf, sizeof buf, fmt, ap);
     va_end(ap);
+    static struct { uint32_t h; int n; } seen[1024];
+    uint32_t h = 2166136261u;   /* FNV-1a */
+    for (const char *s = buf; *s; s++) h = (h ^ (uint8_t)*s) * 16777619u;
+    if (!h) h = 1;
+    int n = 0;
+    for (uint32_t i = h, k = 0; k < 1024; i++, k++) {   /* tabel vol: dan gewoon alles melden */
+        if (seen[i & 1023].h && seen[i & 1023].h != h) continue;
+        seen[i & 1023].h = h;
+        n = ++seen[i & 1023].n;
+        break;
+    }
+    if (n > 20 && !vm_trace) return;
+    fprintf(stderr, "[lingo] %s%s\n", buf, n == 20 && !vm_trace ? " (20 keer, verder niet meer gemeld)" : "");
 }
 
 /* ------------------------------------------------------------------ objecten */

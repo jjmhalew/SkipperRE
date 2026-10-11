@@ -24,8 +24,7 @@ void switch_init(void) {
     char log[PLAT_PATH];
     plat_user_dir(log, sizeof log);
     snprintf(log + strlen(log), sizeof log - strlen(log), "/skipper.log");
-    freopen(log, "w", stderr);
-    setvbuf(stderr, NULL, _IOLBF, 0);
+    log_open(log);
 }
 
 void switch_message(const char *text) {

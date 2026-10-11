@@ -36,6 +36,28 @@ void host_alert(const char *msg) {
     if (!g_headless) host_message(msg, 0);
 }
 
+/* skipper.log: Android en de Switch zetten stderr in een bestand (android_init, switch_init). Boven 32 MB begint het
+ * opnieuw, zodat een melding die blijft komen de opslag niet vult; de hoofdlus kijkt elke ~2 s. De Windows-exe
+ * (subsystem windows) en Linux schrijven geen logbestand: daar gaat stderr naar de console of nergens heen. */
+static char g_log[PLAT_PATH];
+
+void log_open(const char *path) {
+    if (path != g_log) snprintf(g_log, sizeof g_log, "%s", path);
+    freopen(g_log, "w", stderr);
+    setvbuf(stderr, NULL, _IOLBF, 0);
+}
+
+static void log_check(void) {
+    static uint32_t last;
+    uint32_t t = plat_ms();
+    if (!g_log[0] || t - last < 2000) return;
+    last = t;
+    if (ftell(stderr) > 32L << 20) {
+        log_open(g_log);
+        fprintf(stderr, "[log] groter dan 32 MB, opnieuw begonnen\n");
+    }
+}
+
 /* Paden van het spel (D:\..., C:\WINDOWS\..., "CD:\...") -> datamap of opslagmap */
 char *path_resolve(const char *p, char *out, int n) {
     const char *b = p;
@@ -544,6 +566,7 @@ int main(int argc, char **argv) {
     int frames = 0;
     g_hd_clicks = clicks; g_hd_nclicks = nclicks;
     while (P.halted != 2) {
+        log_check();
         g_hd_frame = frames; g_hd_wait = 0;
         if (!g_headless) {
             host_events();

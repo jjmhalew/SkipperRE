@@ -467,6 +467,7 @@ Datum xobj_factory(const char *name);
 
 /* main.c (overal hetzelfde) */
 extern int g_headless;
+void log_open(const char *path);   /* stderr naar dit logbestand (Android, Switch); boven 32 MB begint het opnieuw */
 void host_alert(const char *msg);
 void host_pump(void);          /* OS-berichten verwerken zonder events te dispatchen */
 char *path_resolve(const char *p, char *out, int n);
