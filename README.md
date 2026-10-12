@@ -163,6 +163,8 @@ it out once (`src/disc.c`: its own inflate and ISO9660 reader). For the Python t
 - **Decompiler** (`tools/lingodec.py`): readable Lingo of all movies
 - **Score, labels, cast libs** (`tools/score.py`), frame rendering with inks 0/8/36
 - **Start movie from the projector** (`tools/projector.py`)
+- **Coverage** (`tools/coverage.py`): which handlers of the game's Lingo the engine can run, which it misses and
+  which nothing reaches, with a coverage map → [docs/COVERAGE.md](docs/COVERAGE.md)
 - **Native engine in C** (`src/`): its own Director 5 runtime that plays the original movies. See
   [TODO.md](TODO.md) for what is done and what still needs checking.
 
@@ -255,4 +257,5 @@ python tools/rifx.py extract/Magnus.dxr                  # chunks + cast overvie
 python tools/lingodis.py --out out/lingo extract/*.dxr extract/*.cxt
 python tools/lingodis.py --stats extract/*.dxr extract/*.cxt
 python tools/dcast.py extract/Mmb04.dxr out/cast/Mmb04   # bitmaps → PNG, text → TXT
+python tools/coverage.py --trace out/trace.log --write --html   # Lingo vs. engine → docs/COVERAGE.md, out/coverage.html
 ```
