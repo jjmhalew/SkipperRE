@@ -1,0 +1,21 @@
+{
+  "$schema": "https://recomp.fyi/schema/v1.json",
+  "game": "Skipper & Skeeto in Pretpark",
+  "wikidata": "Q58609390",
+  "system": "PC (Windows)",
+  "type": "port",
+  "original": [
+    { "region": "Netherlands", "revision": "Transposia 1997" },
+    { "region": "Netherlands", "revision": "2003 re-pressing" },
+    { "region": "Nordic", "revision": "Magnus & Myggen 1.5 (Ivanoff)" },
+    { "region": "Denmark", "revision": "Magnus og Myggen 1996" }
+  ],
+  "project": "SkipperRE",
+  "status": "released",
+  "targets": ["Windows", "Linux", "Steam Deck", "Android", "Switch"],
+  "toolchain": "Director",
+  "approach": "Its own Macromedia Director 4/5 runtime in C (RIFX container, cast, score, Lingo bytecode VM) that plays the original movies, plus native replacements for the game's DLLs",
+  "maintainers": [{ "name": "jjmhalew", "link": "https://github.com/jjmhalew" }],
+  "notes": "Plays the Dutch CD and its 2003 re-pressing, the Nordic CD in Danish, Norwegian, Swedish and Finnish, and the first Danish CD (Director 4) from your own CD. The game has no code in an exe: all logic is Lingo in the .dxr movies, disassembled and decompiled with the project's own tools. Not supported: the later Director 8.5 and 10 re-releases. The Switch build is experimental (homebrew).",
+  "tags": ["director", "lingo", "point-and-click", "kids"]
+}
